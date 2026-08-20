@@ -59,6 +59,11 @@ serviceAccount*.json
 # Regenerate them on demand instead. They are documentation output, not source.
 /screenshot/
 
+# Built documentation. `npm run docs:docx` embeds the screenshots above, so the
+# .docx is several MB of the same non-deduping image data — it belongs in a
+# submission folder, not in git. Regenerate it from DOCUMENTATION.md instead.
+/documentation.docx
+
 # Vendored MapLibre worker, copied out of node_modules by
 # scripts/copy-maplibre-worker.mjs on postinstall/predev/prebuild.
 # Deliberately NOT committed: a checked-in copy would drift from the installed

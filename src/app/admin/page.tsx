@@ -8,6 +8,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
@@ -47,6 +48,7 @@ export default function AdminPage() {
   const [bodyEn, setBodyEn] = useState('');
   const [bodyTl, setBodyTl] = useState('');
   const [notify, setNotify] = useState(true);
+  const [showTagalog, setShowTagalog] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -147,8 +149,11 @@ export default function AdminPage() {
         body: JSON.stringify({
           severity,
           category: 'DAM_RELEASE',
-          title: { en: titleEn, tl: titleTl },
-          body: { en: bodyEn, tl: bodyTl },
+          // Trimmed so a field holding only spaces is stored as empty. A
+          // whitespace-only string is truthy, and would defeat the fallback in
+          // pick() — sending a Tagalog reader a blank advisory.
+          title: { en: titleEn.trim(), tl: titleTl.trim() },
+          body: { en: bodyEn.trim(), tl: bodyTl.trim() },
           actionAdvice: {
             en: 'Move to higher ground if you live near the Agno River. Follow your barangay officials.',
             tl: 'Lumipat sa mataas na lugar kung malapit kayo sa Ilog Agno. Sundin ang inyong barangay officials.',
@@ -172,7 +177,8 @@ export default function AdminPage() {
     }
   }
 
-  const canPublish = titleEn && titleTl && bodyEn && bodyTl && !busy;
+  // English alone is enough to publish; pick() serves it to Tagalog readers.
+  const canPublish = titleEn.trim() && bodyEn.trim() && !busy;
 
   return (
     <>
@@ -280,17 +286,67 @@ export default function AdminPage() {
                     ))}
                   </TextField>
 
-                  <TextField label="Title (English)" value={titleEn} onChange={(e) => setTitleEn(e.target.value)} fullWidth required />
-                  <TextField label="Pamagat (Tagalog)" value={titleTl} onChange={(e) => setTitleTl(e.target.value)} fullWidth required />
-                  <TextField label="Message (English)" value={bodyEn} onChange={(e) => setBodyEn(e.target.value)} fullWidth multiline rows={3} required />
-                  <TextField label="Mensahe (Tagalog)" value={bodyTl} onChange={(e) => setBodyTl(e.target.value)} fullWidth multiline rows={3} required />
+                  <TextField label="Title" value={titleEn} onChange={(e) => setTitleEn(e.target.value)} fullWidth required />
+                  <TextField label="Message" value={bodyEn} onChange={(e) => setBodyEn(e.target.value)} fullWidth multiline rows={3} required />
 
+                  {/* Translation is behind a disclosure rather than a second
+                      pair of always-visible boxes. Asking for every advisory
+                      twice made the common case — one officer, one language,
+                      a release happening now — twice the work, and readers set
+                      to Tagalog fall back to this English text anyway. */}
+                  <Box>
+                    <Button
+                      size="small"
+                      onClick={() => setShowTagalog((v) => !v)}
+                      sx={{ textTransform: 'none', px: 0 }}
+                    >
+                      {/* Prefilling from a dam fills the Tagalog too. Say so on
+                          the collapsed control, otherwise text is queued for
+                          sending that the officer never saw. */}
+                      {showTagalog
+                        ? 'Hide Tagalog translation'
+                        : titleTl.trim() || bodyTl.trim()
+                          ? 'Tagalog translation added — review'
+                          : 'Add Tagalog translation (optional)'}
+                    </Button>
+                    <Collapse in={showTagalog}>
+                      <Stack spacing={2} sx={{ mt: 1.5 }}>
+                        <TextField
+                          label="Pamagat (Tagalog)"
+                          value={titleTl}
+                          onChange={(e) => setTitleTl(e.target.value)}
+                          fullWidth
+                        />
+                        <TextField
+                          label="Mensahe (Tagalog)"
+                          value={bodyTl}
+                          onChange={(e) => setBodyTl(e.target.value)}
+                          fullWidth
+                          multiline
+                          rows={3}
+                        />
+                      </Stack>
+                    </Collapse>
+                  </Box>
+
+                  {/* Unknown is not zero. While status is unloaded the count is
+                      simply unavailable, and "0 subscribers" would read as a
+                      confirmed empty list — the same falsehood as a missing
+                      outflow rendered as 0. */}
                   <FormControlLabel
                     control={<Switch checked={notify} onChange={(e) => setNotify(e.target.checked)} />}
-                    label={`Send email to ${status?.email.activeSubscribers ?? 0} subscribers`}
+                    label={
+                      status
+                        ? `Send email to ${status.email.activeSubscribers} subscribers`
+                        : 'Send email to subscribers'
+                    }
                   />
 
-                  {notify && !status?.email.alertsEnabled && (
+                  {/* Only assert that delivery is off once that is actually
+                      known. Inferring it from an unloaded status states a fact
+                      the page has not established, and would tell an officer
+                      nothing was sent when it may well have been. */}
+                  {notify && status && !status.email.alertsEnabled && (
                     <Alert severity="warning">
                       Email delivery is disabled on this deployment. The advisory will post to the
                       site but nothing will be sent.
@@ -330,7 +386,17 @@ export default function AdminPage() {
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Current readings</Typography>
               {!status ? (
-                <CircularProgress size={22} />
+                // A spinner that never resolves reads as "still loading"
+                // indefinitely. Once the fetch has failed — most often because
+                // the account holds no admin grant — say so rather than
+                // animating forever.
+                loadError ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Readings unavailable.
+                  </Typography>
+                ) : (
+                  <CircularProgress size={22} />
+                )
               ) : (
                 <Stack spacing={1.5}>
                   {status.agno.map((d) => (

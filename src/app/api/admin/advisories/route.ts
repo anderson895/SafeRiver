@@ -11,8 +11,12 @@ export const maxDuration = 60;
 const BodySchema = z.object({
   severity: z.enum(['ADVISORY', 'WATCH', 'WARNING', 'CRITICAL']),
   category: z.enum(['DAM_RELEASE', 'WATER_LEVEL', 'RAINFALL', 'FLOOD', 'GENERAL']),
-  title: z.object({ en: z.string().min(3).max(160), tl: z.string().min(3).max(160) }),
-  body: z.object({ en: z.string().min(3).max(1200), tl: z.string().min(3).max(1200) }),
+  // Tagalog is optional. Requiring it meant an officer announcing a live gate
+  // release had to compose two languages before anything could go out, and
+  // `pick()` already falls back to English for readers set to Tagalog. A late
+  // warning in one language beats a timely warning in none.
+  title: z.object({ en: z.string().min(3).max(160), tl: z.string().max(160).default('') }),
+  body: z.object({ en: z.string().min(3).max(1200), tl: z.string().max(1200).default('') }),
   actionAdvice: z.object({ en: z.string().max(600), tl: z.string().max(600) }),
   affectedBarangays: z.array(z.string().max(80)).max(20).default([]),
   /** Send email as well as posting to the site. */

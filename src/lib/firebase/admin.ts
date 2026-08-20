@@ -47,7 +47,18 @@ function loadServiceAccount() {
   return { projectId, clientEmail, privateKey };
 }
 
-function getAdminApp(): App {
+/**
+ * The initialised Admin app.
+ *
+ * Exported because `getAuth()` and `getFirestore()` called with no argument
+ * resolve the *default* app, which exists only once something has initialised
+ * it. Anything reaching for Auth before the first `db()` call therefore threw
+ * "The default Firebase app does not exist" — and since those call sites wrap
+ * the lookup in a try/catch, the real cause was swallowed and reported as a
+ * bad token or a missing user. Pass this explicitly instead of relying on
+ * module evaluation order.
+ */
+export function adminApp(): App {
   const existing = getApps();
   if (existing.length > 0) return existing[0];
 
@@ -62,7 +73,7 @@ function getAdminApp(): App {
 export function db(): Firestore {
   if (globalForFirebase.__floodDb) return globalForFirebase.__floodDb;
 
-  const instance = getFirestore(getAdminApp());
+  const instance = getFirestore(adminApp());
   try {
     // Firestore rejects `undefined` by default; ignoring it lets us build
     // documents with optional fields without stripping keys by hand.

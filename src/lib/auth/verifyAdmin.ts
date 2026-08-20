@@ -1,6 +1,6 @@
 import 'server-only';
 import { getAuth } from 'firebase-admin/auth';
-import { db, COLLECTIONS } from '@/lib/firebase/admin';
+import { adminApp, db, COLLECTIONS } from '@/lib/firebase/admin';
 
 export type AdminRole = 'SUPER_ADMIN' | 'DRRM_OFFICER' | 'VIEWER';
 
@@ -36,7 +36,11 @@ export async function verifyAdmin(req: Request): Promise<AdminAuthResult> {
 
   let decoded;
   try {
-    decoded = await getAuth().verifyIdToken(match[1]);
+    // Pass the app explicitly. A bare getAuth() resolves the default app, which
+    // is initialised lazily by db() on line 44 below — so on an invocation that
+    // reached this route first, it threw, and the catch mislabelled an
+    // initialisation failure as a rejected token.
+    decoded = await getAuth(adminApp()).verifyIdToken(match[1]);
   } catch {
     return { ok: false, status: 401, reason: 'Invalid or expired session' };
   }

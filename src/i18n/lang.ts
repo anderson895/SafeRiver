@@ -21,8 +21,18 @@ export function htmlLang(lang: Lang): string {
   return lang === 'tl' ? 'fil' : 'en';
 }
 
-/** Picks the right side of a bilingual `{en, tl}` field stored in Firestore. */
+/**
+ * Picks the right side of a bilingual `{en, tl}` field stored in Firestore.
+ *
+ * Falls back with `||` rather than `??` deliberately. Translation is optional
+ * when an officer posts an advisory under pressure, and an untranslated field
+ * arrives as an empty string, not as undefined — which `??` would happily
+ * return, showing a Tagalog reader a blank warning. Empty must count as
+ * missing here.
+ */
 export function pick(field: { en?: string; tl?: string } | null | undefined, lang: Lang): string {
   if (!field) return '';
-  return (lang === 'tl' ? field.tl : field.en) ?? field.en ?? '';
+  const preferred = lang === 'tl' ? field.tl : field.en;
+  if (preferred && preferred.trim()) return preferred;
+  return field.en ?? '';
 }

@@ -203,6 +203,7 @@ npm run dev
 |---|---|
 | `npm test` | Run the test suite |
 | `npm run screenshots` | Regenerate documentation images |
+| `npm run docs:docx` | Build `documentation.docx` from this file + screenshots |
 | `npm run gis:build` | Rebuild hazard layers from source data |
 | `npm run db:status` | Show what is stored |
 | `npm run alert:test` | Fire a test alert end to end |
