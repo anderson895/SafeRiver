@@ -325,9 +325,11 @@ npm run db:status
 ### Vercel
 
 1. Import the repository at <https://vercel.com/new>.
-1. **Settings → General → Node.js Version → 22.x.** `engines` in
-   `package.json` requests this, but an existing project keeps whatever it was
-   created with. On Node 20 the admin console returns an empty 500.
+1. **Settings → Build and Deployment → Node.js Version → 22.x.** (Not under
+   *General* — it moved.) `engines` in `package.json` should carry this, but an
+   existing project keeps the version it was created with until the setting is
+   changed or a deployment re-reads `engines`. On Node 20 the admin console
+   returns an empty 500.
 2. **Settings → Environment Variables** — add every variable from `.env.local`,
    with two changes:
    - `NEXT_PUBLIC_SITE_URL` = your production URL
