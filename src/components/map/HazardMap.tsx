@@ -2,9 +2,19 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import Map, { Layer, Source, Popup, NavigationControl, ScaleControl, type MapLayerMouseEvent } from 'react-map-gl/maplibre';
-import type { FillLayerSpecification, LineLayerSpecification } from 'maplibre-gl';
+import { setWorkerUrl, type FillLayerSpecification, type LineLayerSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { HAZARD_COLORS, HAZARD_LABELS } from '@/theme/theme';
+
+/**
+ * Point MapLibre at the worker we serve from /public (synced by
+ * scripts/copy-maplibre-worker.mjs). Turbopack cannot resolve maplibre's own
+ * `new Worker(url, {type:'module'})` call, so without this the worker request
+ * returns the app's HTML shell and the map canvas renders blank.
+ *
+ * Must run at module scope — before any Map is constructed.
+ */
+setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
 export type ReturnPeriod = '5yr' | '25yr' | '100yr';
 

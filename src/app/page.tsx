@@ -55,9 +55,9 @@ export default function Home() {
               <ToggleButton value="100yr">100-year</ToggleButton>
             </ToggleButtonGroup>
 
-            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap' }}>
               {([1, 2, 3] as const).map((v) => (
-                <Stack key={v} direction="row" spacing={0.75} alignItems="center">
+                <Stack key={v} direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
                   <Box
                     sx={{
                       width: 14,

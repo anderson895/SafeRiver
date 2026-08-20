@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template carries no secrets and documents required config,
+# so it must be committed. Without this, a fresh clone has no idea what
+# environment variables the app needs.
+!.env.example
 
 # secrets — NEVER commit. This repo is intended to be public so that
 # GitHub Actions scheduled workflows stay free (see .github/workflows/poll.yml).
@@ -40,9 +44,16 @@ credentials.txt
 serviceAccount*.json
 *.key
 
-# GIS working directory — raw NOAH downloads are ~130 MB and are
-# reproducible via scripts/gis/run_all.sh. Only the built .pmtiles is committed.
+# GIS working directory — raw NOAH downloads are ~150 MB and are fully
+# reproducible via `npm run gis:build`. Only the built layers in public/geo
+# are committed.
 /data/
+
+# Vendored MapLibre worker, copied out of node_modules by
+# scripts/copy-maplibre-worker.mjs on postinstall/predev/prebuild.
+# Deliberately NOT committed: a checked-in copy would drift from the installed
+# maplibre-gl version, which is the exact failure this script prevents.
+/public/maplibre/
 
 # vercel
 .vercel

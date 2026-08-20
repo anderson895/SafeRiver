@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// Security model
+// --------------
+// Every mutation in this system goes through a Next.js route handler using the
+// Firebase Admin SDK, which bypasses these rules entirely. So these rules exist
+// to constrain the *client* SDK, and the correct default is: deny everything.
+//
+// The browser never reads Firestore directly for public pages either — those go
+// through /api/* route handlers with `revalidate` caching. That is a deliberate
+// quota decision: it keeps reads at a flat ~250/day regardless of how many
+// visitors the site gets, instead of scaling with traffic toward the 50k/day
+// free-tier ceiling.
+//
+// Consequence: anything not explicitly allowed below is server-only.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // An admin is a signed-in user with an active adminUsers record.
+    function isActiveAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.isActive == true;
+    }
+
+    // Bilingual flood-education articles are the only genuinely public content,
+    // and they are read-only from the client.
+    match /content/{docId=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Admin console reads live dam/alert state via the client SDK. Low traffic
+    // and authenticated, so it does not threaten the read quota.
+    match /damLatest/{damId}   { allow read: if isActiveAdmin(); allow write: if false; }
+    match /damDaily/{docId}    { allow read: if isActiveAdmin(); allow write: if false; }
+    match /damReadings/{docId} { allow read: if isActiveAdmin(); allow write: if false; }
+    match /rainfallCache/{doc} { allow read: if isActiveAdmin(); allow write: if false; }
+    match /alerts/{alertId}    { allow read: if isActiveAdmin(); allow write: if false; }
+    match /emailJobs/{jobId}   { allow read: if isActiveAdmin(); allow write: if false; }
+    match /config/{docId}      { allow read: if isActiveAdmin(); allow write: if false; }
+
+    // An admin may read their own record (to resolve their role) but never
+    // write it — privilege escalation must not be self-service.
+    match /adminUsers/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Subscriber emails are personal data under RA 10173. They are never
+    // readable or writable from a browser, not even by an admin — the admin
+    // console reaches them through a server route that can audit the access.
+    match /subscribers/{docId} { allow read, write: if false; }
+    match /emailLog/{docId}    { allow read, write: if false; }
+    match /alertState/{docId}  { allow read, write: if false; }
+
+    // Default deny.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

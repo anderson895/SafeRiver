@@ -1,0 +1,35 @@
+name: Keep scheduled workflows alive
+
+# GitHub automatically DISABLES scheduled workflows in a public repository after
+# 60 days with no repository activity. For a thesis project that is a realistic
+# failure mode: you finish the build, stop committing, and two months later —
+# right around defense — data collection has silently stopped and the charts
+# have a flat gap in them.
+#
+# This job pushes a trivial commit weekly, which resets that 60-day timer.
+# It is cheap insurance against losing the one asset that cannot be recreated
+# after the fact: accumulated history.
+
+on:
+  schedule:
+    - cron: '0 3 * * 1' # 03:00 UTC every Monday
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Touch heartbeat file and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p .github
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/last-keepalive.txt
+          git add .github/last-keepalive.txt
+          git commit -m "chore: keepalive heartbeat" || exit 0
+          git push

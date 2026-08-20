@@ -1,0 +1,81 @@
+name: Poll flood data sources
+
+# WHY GITHUB ACTIONS AND NOT VERCEL CRON
+# Vercel's Hobby plan restricts cron to ONCE PER DAY — a `*/30` schedule fails
+# the deployment outright. A flood alert system cannot run on daily polling, so
+# scheduling lives here instead. Public repositories get unlimited Actions
+# minutes, which keeps this at zero cost.
+#
+# GitHub schedules are best-effort and can be delayed under platform load. That
+# is acceptable here: PAGASA publishes the dam bulletin once daily at 08:00, so
+# a 30-minute cadence already over-samples the source by ~48x and a late run
+# changes nothing. The rainfall forecast updates hourly, likewise tolerant.
+
+on:
+  schedule:
+    # Every 30 minutes. Times are UTC; PHT is UTC+8.
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # allows a manual run from the Actions tab
+
+# If a run is still going when the next one fires, let the new one wait rather
+# than run concurrently — two scrapes writing the same documents is wasteful.
+concurrency:
+  group: poll-flood-data
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Poll PAGASA dam bulletin
+        env:
+          APP_URL: ${{ secrets.VERCEL_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          echo "Polling dams..."
+          code=$(curl -sS -o /tmp/dams.json -w '%{http_code}' \
+            -X POST "$APP_URL/api/cron/poll-dams" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 90 --retry 2 --retry-delay 10)
+          cat /tmp/dams.json
+          echo ""
+          if [ "$code" != "200" ]; then
+            echo "::error::poll-dams returned HTTP $code"
+            exit 1
+          fi
+
+      - name: Poll rainfall + river discharge
+        if: always() # a dam-scrape failure must not skip the rainfall poll
+        env:
+          APP_URL: ${{ secrets.VERCEL_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          echo "Polling rainfall..."
+          code=$(curl -sS -o /tmp/rain.json -w '%{http_code}' \
+            -X POST "$APP_URL/api/cron/poll-rainfall" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 90 --retry 2 --retry-delay 10)
+          cat /tmp/rain.json
+          echo ""
+          if [ "$code" != "200" ]; then
+            echo "::error::poll-rainfall returned HTTP $code"
+            exit 1
+          fi
+
+      # Alert emails are fanned out in pages so a single invocation never runs
+      # past Vercel's 60s function limit. Gmail's deliberately conservative
+      # ~5 msg/s means a few hundred subscribers span multiple calls, so keep
+      # calling until the queue reports it is drained.
+      - name: Drain alert email queue
+        if: always()
+        env:
+          APP_URL: ${{ secrets.VERCEL_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          for i in $(seq 1 20); do
+            body=$(curl -sS -X POST "$APP_URL/api/cron/dispatch" \
+              -H "Authorization: Bearer $CRON_SECRET" --max-time 90 || echo '{}')
+            echo "dispatch[$i]: $body"
+            echo "$body" | grep -q '"hasMore":true' || break
+          done
