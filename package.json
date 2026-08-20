@@ -64,5 +64,8 @@
     "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "jose": "^5.10.0"
   }
 }

@@ -149,22 +149,35 @@ instead.
 
 | Tool | Version | Notes |
 |---|---|---|
-| Node.js | **22.x** | Pinned in `engines`. Not optional — see below |
+| Node.js | **22.x** | Pinned in `engines` to match the deployment |
 | npm | 10+ | Verified on 11.4.2 |
 | Git | any | |
 | Python | 3.9+ | **Only** for `npm run docs:docx`. Not needed to run the app |
 
-> **Node 22 is a hard requirement, and the reason is not obvious.**
+> **Do not remove the `jose` override in `package.json`.**
 >
-> `firebase-admin` → `jwks-rsa` → `jose@6`, and `jose@6` is ESM-only while
-> `jwks-rsa` is CommonJS and `require()`s it. Node 22 permits `require()` of an
-> ES module; Node 20 throws `ERR_REQUIRE_ESM`.
+> ```json
+> "overrides": { "jose": "^5.10.0" }
+> ```
 >
-> The failure is invisible in development. It takes down the whole
-> `firebase-admin/auth` module, so every admin route returns **500 with an empty
-> body** — no message, no stack — while every public route keeps working,
-> because only the admin path touches Auth. `engines` pins it so Vercel matches
-> what you develop against.
+> `firebase-admin` → `jwks-rsa` → `jose`. Every `jwks-rsa@4.x` pins `jose@^6`,
+> which is **ESM-only**, while `jwks-rsa` itself is CommonJS and `require()`s
+> it. Next.js loads `firebase-admin` as an external package via `require`, so
+> on a deployment this throws `ERR_REQUIRE_ESM` and takes down the entire
+> `firebase-admin/auth` module. Every admin route then returns **500 with an
+> empty body** — no message, no stack — while every public route keeps working,
+> because only the admin path touches Auth.
+>
+> `jose@5` ships a real CommonJS build. `jwks-rsa` uses exactly two of its
+> functions, `importJWK` and `exportSPKI`, both unchanged between v5 and v6, so
+> the override is narrow and safe. Verify after any dependency change:
+>
+> ```bash
+> node -e "require('module').createRequire(process.cwd()+'/package.json')('firebase-admin/auth')"
+> ```
+>
+> Node 22 is pinned in `engines` for parity with the deployment, but it is not
+> what fixes this — the failure reproduces on Node 22 as well.
 
 A Google account is required for Firebase, and a second (or the same) with
 2-Step Verification enabled for Gmail SMTP.
@@ -325,11 +338,8 @@ npm run db:status
 ### Vercel
 
 1. Import the repository at <https://vercel.com/new>.
-1. **Settings → Build and Deployment → Node.js Version → 22.x.** (Not under
-   *General* — it moved.) `engines` in `package.json` should carry this, but an
-   existing project keeps the version it was created with until the setting is
-   changed or a deployment re-reads `engines`. On Node 20 the admin console
-   returns an empty 500.
+1. **Settings → Build and Deployment → Node.js Version → 22.x**, for parity with
+   local development. (Not under *General* — it moved.)
 2. **Settings → Environment Variables** — add every variable from `.env.local`,
    with two changes:
    - `NEXT_PUBLIC_SITE_URL` = your production URL
@@ -403,7 +413,7 @@ hazard geometry escapes the municipal boundary.
 | Symptom | Cause |
 |---|---|
 | Map renders blank, only a MIME warning | MapLibre worker missing. `node scripts/copy-maplibre-worker.mjs` |
-| Admin routes 500 with an **empty body**, public routes fine | Deployment is on Node 20. `jose@6` is ESM, `jwks-rsa` `require()`s it → `ERR_REQUIRE_ESM` kills `firebase-admin/auth`. Set the runtime to **22.x** |
+| Admin routes 500 with an **empty body**, public routes fine | `ERR_REQUIRE_ESM` killing `firebase-admin/auth`. The `jose` override is missing or was dropped by a dependency bump — see Prerequisites |
 | `The default Firebase app does not exist` | `getAuth()` called before `db()`. Pass the app: `getAuth(adminApp())` |
 | `This account is not an administrator` | Auth account exists but has no `adminUsers` document. Run `admin:grant` |
 | Advisory publishes but no email arrives | `ALERTS_ENABLED` is not `true`, or nothing drained the queue. `npm run alerts:send` |
