@@ -1,5 +1,4 @@
 import 'server-only';
-import { getAuth } from 'firebase-admin/auth';
 import { adminApp, db, COLLECTIONS } from '@/lib/firebase/admin';
 
 export type AdminRole = 'SUPER_ADMIN' | 'DRRM_OFFICER' | 'VIEWER';
@@ -13,7 +12,7 @@ export interface AdminIdentity {
 
 export type AdminAuthResult =
   | { ok: true; admin: AdminIdentity }
-  | { ok: false; status: 401 | 403; reason: string };
+  | { ok: false; status: 401 | 403 | 500; reason: string };
 
 /**
  * Verifies that a request comes from an active admin.
@@ -34,13 +33,32 @@ export async function verifyAdmin(req: Request): Promise<AdminAuthResult> {
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
   if (!match) return { ok: false, status: 401, reason: 'Missing bearer token' };
 
+  // Imported here rather than at module scope on purpose.
+  //
+  // A static `import { getAuth } from 'firebase-admin/auth'` that fails to
+  // resolve takes down the whole module, so the route never runs and the
+  // platform answers 500 with an EMPTY body — no stack, no message, and the
+  // browser reports only "Unexpected end of JSON input". Loading it here turns
+  // that into a catchable error this function can describe.
+  let auth;
+  try {
+    const { getAuth } = await import('firebase-admin/auth');
+    // Pass the app explicitly. A bare getAuth() resolves the default app, which
+    // db() initialises lazily further down — so on an invocation that reached
+    // this route first, it threw.
+    auth = getAuth(adminApp());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[verifyAdmin] auth unavailable: ${message}`);
+    // Explicitly NOT 401. This is the server being misconfigured, not the
+    // caller's token being bad, and reporting it as a session problem sends
+    // whoever is debugging to re-check a login that was fine all along.
+    return { ok: false, status: 500, reason: `Authentication unavailable: ${message}` };
+  }
+
   let decoded;
   try {
-    // Pass the app explicitly. A bare getAuth() resolves the default app, which
-    // is initialised lazily by db() on line 44 below — so on an invocation that
-    // reached this route first, it threw, and the catch mislabelled an
-    // initialisation failure as a rejected token.
-    decoded = await getAuth(adminApp()).verifyIdToken(match[1]);
+    decoded = await auth.verifyIdToken(match[1]);
   } catch {
     return { ok: false, status: 401, reason: 'Invalid or expired session' };
   }

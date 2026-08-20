@@ -36,6 +36,36 @@ interface Status {
 
 const SEVERITIES = ['ADVISORY', 'WATCH', 'WARNING', 'CRITICAL'] as const;
 
+/**
+ * Parses an API response, keeping the HTTP status when the body is not JSON.
+ *
+ * Calling `res.json()` before checking `res.ok` discards the status entirely:
+ * a 500 with an empty body — which is how a serverless function reports a
+ * crash before it ever ran — surfaced as "Unexpected end of JSON input", a
+ * message about parsing that says nothing about the server being down.
+ */
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+
+  let body: Record<string, unknown> | null = null;
+  if (text) {
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      /* not JSON — fall through to the status-based message below */
+    }
+  }
+
+  if (body && res.ok && body.ok !== false) return body;
+
+  if (typeof body?.error === 'string') throw new Error(body.error);
+  throw new Error(
+    text
+      ? `HTTP ${res.status} — server returned a non-JSON response`
+      : `HTTP ${res.status} — server returned an empty response (check the deployment logs)`,
+  );
+}
+
 /** Plain account of what happened to the email, for the officer who pressed send. */
 function describeDelivery(notify: boolean, sent: number, stillQueued: boolean): string {
   if (!notify) return 'Advisory published to the site. No email was sent.';
@@ -69,9 +99,7 @@ export default function AdminPage() {
   // setState calls at the call sites keeps them out of the effect body.
   const fetchStatus = useCallback(async (): Promise<Status> => {
     const res = await authedFetch('/api/admin/status');
-    const body = await res.json();
-    if (!res.ok || !body.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-    return body as Status;
+    return (await readJson(res)) as unknown as Status;
   }, [authedFetch]);
 
   const refresh = useCallback(() => {
@@ -147,8 +175,7 @@ export default function AdminPage() {
           notify,
         }),
       });
-      const body = await res.json();
-      if (!res.ok || !body.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      const body = await readJson(res);
       // Report what actually reached people, not what was merely accepted.
       // "Queued for email" was true and useless: it read as delivered, while a
       // stalled queue looked identical to a successful send.
