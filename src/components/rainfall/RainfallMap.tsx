@@ -85,7 +85,9 @@ export default function RainfallMap({
         style={{ width: '100%', height: '100%' }}
       >
         <NavigationControl position="top-left" />
-        <ScaleControl position="bottom-left" />
+        {/* Top-right: the bottom edge is taken by the time slider and the
+            attribution, and a full-width slider collided with both. */}
+        <ScaleControl position="top-right" />
 
         {url && (
           // `key` forces a new source when the frame changes; MapLibre will not
@@ -102,12 +104,23 @@ export default function RainfallMap({
           </Source>
         )}
 
+        {/* At radar zoom San Manuel is a few pixels across. A thin dashed
+            outline was effectively invisible, leaving no way to tell whether
+            a rain cell was over the municipality or two towns away — which is
+            the only question this map exists to answer. A tinted fill plus a
+            heavier outline makes it findable at a glance. */}
         <Source id="sm-boundary" type="geojson" data="/geo/sanmanuel-boundary.geojson">
+          <Layer
+            id="sm-boundary-fill"
+            type="fill"
+            source="sm-boundary"
+            paint={{ 'fill-color': '#1565C0', 'fill-opacity': 0.12 }}
+          />
           <Layer
             id="sm-boundary-line"
             type="line"
             source="sm-boundary"
-            paint={{ 'line-color': '#1565C0', 'line-width': 2.5, 'line-dasharray': [3, 2] }}
+            paint={{ 'line-color': '#0D47A1', 'line-width': 3 }}
           />
         </Source>
       </Map>
@@ -115,12 +128,19 @@ export default function RainfallMap({
       {frames.length > 1 && (
         <Paper
           elevation={3}
-          sx={{ position: 'absolute', left: 12, right: 12, bottom: 12, px: 2, py: 1, borderRadius: 2 }}
+          // Raised clear of MapLibre's attribution bar, which sits flush to
+          // the bottom edge of the canvas.
+          sx={{ position: 'absolute', left: 12, right: 12, bottom: 30, px: 2, py: 1, borderRadius: 2 }}
         >
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-            <Typography variant="caption" sx={{ fontWeight: 700, minWidth: 62 }}>
-              {label}
-            </Typography>
+            <Box sx={{ minWidth: 96 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
+                Radar time
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                {label}
+              </Typography>
+            </Box>
             <Slider
               size="small"
               min={0}
@@ -128,7 +148,11 @@ export default function RainfallMap({
               value={Math.min(index, frames.length - 1)}
               onChange={(_, v) => setIndex(v as number)}
               aria-label="Radar time"
+              marks
             />
+            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+              {index === frames.length - 1 ? 'latest' : `${frames.length - 1 - index} back`}
+            </Typography>
           </Stack>
         </Paper>
       )}
