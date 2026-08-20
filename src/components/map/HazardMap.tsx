@@ -211,8 +211,14 @@ export default function HazardMap({
               source="barangays"
               paint={{ 'fill-color': '#000000', 'fill-opacity': 0 }}
             />
-            <Layer {...notMappedFill} />
-            <Layer {...notMappedLine} />
+            {/* beforeId puts the hatch UNDERNEATH the hazard fill.
+                Lapalo and Narra are 1-3% surveyed, not 0%, so a little real
+                hazard does exist inside them. Painting the hatch on top muted
+                exactly the part a resident there most needs to see. As a
+                backdrop it still says "largely unsurveyed" without dimming
+                the evidence that is available. */}
+            <Layer {...notMappedFill} beforeId={HAZARD_FILL_ID} />
+            <Layer {...notMappedLine} beforeId={HAZARD_FILL_ID} />
             <Layer {...barangayLine} />
           </Source>
         )}

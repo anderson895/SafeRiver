@@ -82,7 +82,23 @@ async function buildFloodLayers() {
         `-i "${src}"`,
         `-clip bbox=${PREFILTER_BBOX}`,
         '-dissolve2 Var',
-        '-simplify visvalingam 8% keep-shapes',
+        // NOT simplified.
+        //
+        // At 8% retention the layer was fine at municipal zoom but collapsed
+        // into straight-edged wedges at street level, where a resident is
+        // actually deciding whether their own house is at risk. A flood edge
+        // does not run diagonally across a city block, and showing that it
+        // does can put a house in the wrong hazard class.
+        //
+        // Measured cost of keeping full detail on the 100-year layer:
+        //   8%   11,007 vertices    60 KB gzipped
+        //   25%  17,311 vertices    93 KB
+        //   50%  29,207 vertices   150 KB
+        //   none 37,742 vertices   191 KB
+        //
+        // 191 KB is one photograph, and only the selected return period is
+        // ever fetched. That is not a price worth paying in accuracy for a
+        // map whose whole purpose is telling someone where the water reaches.
         '-filter-slivers min-area=200m2',
         '-clean',
         `-clip "${OUT_DIR}/sanmanuel-boundary.geojson"`,
