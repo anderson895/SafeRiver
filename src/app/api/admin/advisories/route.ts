@@ -1,12 +1,21 @@
 import { z } from 'zod';
 import { adminGuard } from '@/lib/auth/verifyAdmin';
 import { db, COLLECTIONS, Timestamp } from '@/lib/firebase/admin';
-import { queueAlertEmail } from '@/lib/email/dispatcher';
+import { dispatchOnce, queueAlertEmail } from '@/lib/email/dispatcher';
 import { SEVERITY_RANK, type Severity } from '@/lib/alerts/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+
+/**
+ * Wall-clock budget for sending before this route returns.
+ *
+ * Well under `maxDuration` so the response is never truncated. Whatever does
+ * not fit stays queued for the cron, so a large subscriber list makes delivery
+ * late, never lost.
+ */
+const DISPATCH_BUDGET_MS = 30_000;
 
 const BodySchema = z.object({
   severity: z.enum(['ADVISORY', 'WATCH', 'WARNING', 'CRITICAL']),
@@ -75,15 +84,44 @@ export async function POST(req: Request) {
     });
 
     let jobId: string | null = null;
+    let sent = 0;
+    let stillQueued = false;
+
     if (input.notify) {
       jobId = await queueAlertEmail(ref.id, now);
       await ref.set({ emailJobId: jobId }, { merge: true });
+
+      // Send now rather than waiting for the next scheduled dispatch.
+      //
+      // Queueing alone was indistinguishable from failing: the officer saw
+      // "published", nothing arrived, and the only thing that moved was a
+      // pending counter. Worse, this form exists precisely to announce a gate
+      // release AS IT HAPPENS — up to 30 minutes of cron latency defeats the
+      // reason for posting by hand at all.
+      //
+      // Bounded well inside maxDuration. Anything left over is still queued and
+      // the cron drains it, so a slow run degrades to "late", never to "lost".
+      const budget = Date.now() + DISPATCH_BUDGET_MS;
+      try {
+        do {
+          const result = await dispatchOnce(new Date());
+          sent += result.sent;
+          stillQueued = result.hasMore;
+        } while (stillQueued && Date.now() < budget);
+      } catch (dispatchErr) {
+        // The alert is saved and the job is queued; delivery can still happen
+        // on the next cron pass. Never fail the publish over it.
+        console.error(`[api/admin/advisories] dispatch: ${String(dispatchErr)}`);
+        stillQueued = true;
+      }
     }
 
     return Response.json({
       ok: true,
       alertId: ref.id,
       jobId,
+      sent,
+      stillQueued,
       severityRank: SEVERITY_RANK[severity],
       notify: input.notify,
     });

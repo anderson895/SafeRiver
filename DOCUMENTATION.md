@@ -207,6 +207,7 @@ npm run dev
 | `npm run gis:build` | Rebuild hazard layers from source data |
 | `npm run db:status` | Show what is stored |
 | `npm run alert:test` | Fire a test alert end to end |
+| `npm run alerts:send` | Send whatever is queued (production does this on cron) |
 | `npm run admin:grant -- email@example.com` | Grant admin access |
 
 Deployment is automatic: pushing to `main` deploys to Vercel.

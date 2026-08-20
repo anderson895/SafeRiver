@@ -17,7 +17,6 @@ import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined';
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined';
 import SendOutlined from '@mui/icons-material/SendOutlined';
 import PageHeader from '@/components/common/PageHeader';
@@ -37,6 +36,20 @@ interface Status {
 
 const SEVERITIES = ['ADVISORY', 'WATCH', 'WARNING', 'CRITICAL'] as const;
 
+/** Plain account of what happened to the email, for the officer who pressed send. */
+function describeDelivery(notify: boolean, sent: number, stillQueued: boolean): string {
+  if (!notify) return 'Advisory published to the site. No email was sent.';
+  const people = `${sent} subscriber${sent === 1 ? '' : 's'}`;
+  if (sent > 0) {
+    return stillQueued
+      ? `Advisory published. Sent to ${people}; the rest are still going out.`
+      : `Advisory published and emailed to ${people}.`;
+  }
+  return stillQueued
+    ? 'Advisory published, but no email has gone out yet. It is still queued — check the Queue card and system health.'
+    : 'Advisory published. No email was sent: no eligible subscribers, or they have hit their daily limit.';
+}
+
 export default function AdminPage() {
   const { authedFetch, signOutAdmin, user } = useAdminAuth();
   const [status, setStatus] = useState<Status | null>(null);
@@ -51,7 +64,6 @@ export default function AdminPage() {
   const [showTagalog, setShowTagalog] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   // Pure fetch: returns data or throws, and touches no state. Keeping the
   // setState calls at the call sites keeps them out of the effect body.
@@ -112,33 +124,6 @@ export default function AdminPage() {
     );
   }
 
-  /**
-   * Ready-to-paste text for the barangay Facebook page.
-   *
-   * In rural Pangasinan that is how information actually travels. The system
-   * is a force-multiplier for the channels people already use, not a
-   * replacement for them.
-   */
-  const facebookText = [
-    `[${severity}] ${titleEn}`,
-    '',
-    bodyEn,
-    '',
-    titleTl,
-    bodyTl,
-    '',
-    'Source: PAGASA Dam Bulletin',
-    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://safe-river-san-manuel.vercel.app',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  async function copyForFacebook() {
-    await navigator.clipboard.writeText(facebookText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
-  }
-
   async function publish(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -164,11 +149,10 @@ export default function AdminPage() {
       });
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      setResult(
-        notify
-          ? `Advisory published and queued for email (job ${String(body.jobId).slice(0, 8)}).`
-          : 'Advisory published to the site. No email was sent.',
-      );
+      // Report what actually reached people, not what was merely accepted.
+      // "Queued for email" was true and useless: it read as delivered, while a
+      // stalled queue looked identical to a successful send.
+      setResult(describeDelivery(notify, Number(body.sent ?? 0), Boolean(body.stillQueued)));
       refresh();
     } catch (err) {
       setResult(`Failed: ${(err as Error).message}`);
@@ -365,14 +349,6 @@ export default function AdminPage() {
                       startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <SendOutlined />}
                     >
                       {busy ? 'Publishing…' : 'Publish advisory'}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<ContentCopyOutlined />}
-                      onClick={() => void copyForFacebook()}
-                      disabled={!titleEn || !bodyEn}
-                    >
-                      {copied ? 'Copied' : 'Copy for Facebook'}
                     </Button>
                   </Stack>
                 </Stack>

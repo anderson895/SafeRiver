@@ -13,6 +13,10 @@
  * so the secret never lands in shell history. It also avoids the curl/-H
  * incompatibility in PowerShell, where `curl` is an alias for Invoke-WebRequest.
  */
+// Marks this file a module, so BASE_URL and main() stay file-scoped rather
+// than joining the global namespace shared with the other scripts.
+export {};
+
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 
 function arg(name: string, fallback: string): string {

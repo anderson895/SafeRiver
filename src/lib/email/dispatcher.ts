@@ -78,7 +78,11 @@ export async function dispatchOnce(now: Date = new Date()): Promise<DispatchResu
   const alertSnap = await database.collection(COLLECTIONS.alerts).doc(job.alertId as string).get();
   if (!alertSnap.exists) {
     await jobRef.set({ status: 'FAILED', error: 'alert missing', finishedAt: Timestamp.fromDate(now) }, { merge: true });
-    return { jobId, sent: 0, skipped: 0, failed: 0, hasMore: false, reason: 'alert missing' };
+    // Keep going if other jobs are waiting. Reporting hasMore:false here made a
+    // single orphaned job halt the entire drain: the caller stopped, every
+    // healthy job behind it stayed queued, and each subsequent run cleared only
+    // one more orphan while appearing to do nothing at all.
+    return { jobId, sent: 0, skipped: 0, failed: 0, hasMore: moreJobsQueued, reason: 'alert missing' };
   }
 
   const alert = alertSnap.data()!;

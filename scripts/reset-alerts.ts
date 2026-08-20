@@ -33,7 +33,11 @@ async function main() {
     throw new Error('Refusing to clear alert history in production without --force');
   }
 
-  for (const name of [COLLECTIONS.alerts, COLLECTIONS.alertState]) {
+  // emailJobs too. Clearing alerts while leaving their queued jobs behind left
+  // every one of them pointing at a document that no longer exists, and the
+  // dispatcher could only report "alert missing" — which reads as a broken
+  // mailer rather than as debris from a reset.
+  for (const name of [COLLECTIONS.alerts, COLLECTIONS.alertState, COLLECTIONS.emailJobs]) {
     const count = await clearCollection(name);
     console.log(`cleared ${count} document(s) from ${name}`);
   }
