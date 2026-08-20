@@ -47,6 +47,37 @@ async function main() {
     console.log(`  ${id.padEnd(10)} ${rows.length} day(s): ${dates.join(', ') || '(none)'}`);
   }
 
+  console.log('\n=== subscribers ===');
+  const subs = await database.collection(COLLECTIONS.subscribers).get();
+  if (subs.empty) {
+    console.log('  (none)');
+  } else {
+    const byStatus = new Map<string, number>();
+    for (const d of subs.docs) {
+      const s = (d.get('status') as string) ?? 'UNKNOWN';
+      byStatus.set(s, (byStatus.get(s) ?? 0) + 1);
+    }
+    for (const [status, n] of byStatus) console.log(`  ${status.padEnd(14)} ${n}`);
+    for (const d of subs.docs) {
+      // Show only the masked address; these are personal data under RA 10173.
+      const email = (d.get('email') as string) ?? '';
+      const masked = email.replace(/^(.).*(@.*)$/, '$1***$2');
+      console.log(
+        `    ${masked.padEnd(24)} ${String(d.get('status')).padEnd(12)} lang=${d.get('language')} ` +
+          `sentToday=${d.get('emailsToday') ?? 0}`,
+      );
+    }
+  }
+
+  console.log('\n=== email queue ===');
+  const jobs = await database.collection(COLLECTIONS.emailJobs).get();
+  if (jobs.empty) console.log('  (no jobs)');
+  for (const j of jobs.docs) {
+    console.log(
+      `  ${j.id.slice(0, 8)} ${String(j.get('status')).padEnd(8)} sent=${j.get('sentCount') ?? 0} failed=${j.get('failedCount') ?? 0}`,
+    );
+  }
+
   const health = await database.collection(COLLECTIONS.config).doc('systemHealth').get();
   if (health.exists) {
     const h = health.data()!;
