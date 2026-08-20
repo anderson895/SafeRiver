@@ -21,6 +21,27 @@
  */
 export const UNMAPPED_BARANGAYS = ['San Roque', 'Lapalo', 'Narra'] as const;
 
+/**
+ * Native cell size of the hazard data, in metres.
+ *
+ * Measured from the delivered geometry, not taken from the dataset
+ * description: 97.5% of all 35,322 polygon segments are exactly 30.0 m long.
+ * The layers are a vectorised 30 m raster.
+ *
+ * Two consequences worth stating plainly:
+ *
+ *  - The stair-stepped edges visible when zoomed in are the real shape of the
+ *    data, not a rendering fault. Smoothing them would imply a precision the
+ *    survey does not have, which on a hazard map is a lie with consequences.
+ *  - Below roughly this scale the map cannot distinguish one property from its
+ *    neighbour. It answers "is this area at risk", not "is this house at risk".
+ *
+ * Note that the upstream dataset description credits 1 m LiDAR/IfSAR DEMs.
+ * Whatever the modelling input, the published product is 30 m — worth citing
+ * accurately rather than repeating the source's own framing.
+ */
+export const HAZARD_CELL_SIZE_M = 30;
+
 /** Percentage of each barangay covered by the 100-year hazard layer. */
 export const COVERAGE_PERCENT: Record<string, number> = {
   'Guiset Sur': 84,

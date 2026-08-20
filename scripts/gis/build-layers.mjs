@@ -142,7 +142,7 @@ async function buildAdminLayers() {
   // GADM level-3 is already a generalised product — its San Manuel outline is
   // 119 km2 against an official 129.18 km2 — and simplifying further makes a
   // bad fit worse. At 45% the municipal outline collapsed to 33 vertices, and
-  // clipping 1-metre LiDAR hazard data against an outline that coarse does not
+  // clipping 30 m gridded hazard data against an outline that coarse does not
   // just look wrong: it erases real hazard inside the municipality, which is
   // the one error this system must never make.
   //

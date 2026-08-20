@@ -19,6 +19,7 @@ import PageHeader from '@/components/common/PageHeader';
 import AlertCard from '@/components/alerts/AlertCard';
 import { useAlerts } from '@/components/alerts/useAlerts';
 import { HAZARD_COLORS } from '@/theme/theme';
+import { HAZARD_CELL_SIZE_M } from '@/content/hazard-coverage';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { ReturnPeriod } from '@/components/map/HazardMap';
 
@@ -107,7 +108,14 @@ export default function DashboardPage() {
                 <Typography variant="caption">{dict.hazard.dataGapNotice}</Typography>
               </Alert>
 
+              {/* Zoomed in, the edges are visibly stair-stepped. That is the
+                  source grid, not a rendering fault — say so, or it reads as a
+                  broken map and undermines trust in the parts that are right. */}
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
+                Hazard mapping has a {HAZARD_CELL_SIZE_M} m cell size, so edges appear stepped when
+                zoomed in. It indicates whether an <em>area</em> is at risk, not an individual house.
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
                 Flood hazard data © Project NOAH / UP NOAH Center, licensed under ODbL. Basemap ©
                 OpenFreeMap, © OpenMapTiles, data from OpenStreetMap contributors.
               </Typography>
