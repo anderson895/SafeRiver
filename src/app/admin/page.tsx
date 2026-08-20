@@ -1,0 +1,363 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Grid from '@mui/material/Grid';
+import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined';
+import LogoutOutlined from '@mui/icons-material/LogoutOutlined';
+import SendOutlined from '@mui/icons-material/SendOutlined';
+import PageHeader from '@/components/common/PageHeader';
+import { useAdminAuth } from '@/components/admin/AdminAuthProvider';
+import { SEVERITY_COLORS } from '@/theme/theme';
+
+interface Status {
+  admin: { email: string | null; role: string };
+  scrape: { ok: boolean | null; ageMinutes: number | null; consecutiveFailures: number; error: string | null };
+  rainfall: { ok: boolean | null; ageMinutes: number | null };
+  email: { alertsEnabled: boolean; activeSubscribers: number; pendingJobs: number };
+  agno: Array<{
+    damId: string; damName: string; rwl: number | null; nhwl: number | null;
+    outflowCms: number | null; gatesOpen: number | null; isReleasing: boolean;
+  }>;
+}
+
+const SEVERITIES = ['ADVISORY', 'WATCH', 'WARNING', 'CRITICAL'] as const;
+
+export default function AdminPage() {
+  const { authedFetch, signOutAdmin, user } = useAdminAuth();
+  const [status, setStatus] = useState<Status | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [severity, setSeverity] = useState<(typeof SEVERITIES)[number]>('WARNING');
+  const [titleEn, setTitleEn] = useState('');
+  const [titleTl, setTitleTl] = useState('');
+  const [bodyEn, setBodyEn] = useState('');
+  const [bodyTl, setBodyTl] = useState('');
+  const [notify, setNotify] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Pure fetch: returns data or throws, and touches no state. Keeping the
+  // setState calls at the call sites keeps them out of the effect body.
+  const fetchStatus = useCallback(async (): Promise<Status> => {
+    const res = await authedFetch('/api/admin/status');
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+    return body as Status;
+  }, [authedFetch]);
+
+  const refresh = useCallback(() => {
+    fetchStatus()
+      .then((s) => {
+        setStatus(s);
+        setLoadError(null);
+      })
+      .catch((err: Error) => setLoadError(err.message));
+  }, [fetchStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await fetchStatus();
+        if (!cancelled) {
+          setStatus(s);
+          setLoadError(null);
+        }
+      } catch (err) {
+        if (!cancelled) setLoadError((err as Error).message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchStatus]);
+
+  /**
+   * Prefills from the live dam reading.
+   *
+   * An officer under pressure should be confirming numbers, not typing them.
+   * Retyping a discharge figure at 2 a.m. is exactly where a transcription
+   * error gets broadcast to every subscriber.
+   */
+  function prefillFromDam(damId: string) {
+    const dam = status?.agno.find((d) => d.damId === damId);
+    if (!dam) return;
+    const cms = dam.outflowCms != null ? `${dam.outflowCms} CMS` : 'water';
+    const gates = dam.gatesOpen != null ? `${dam.gatesOpen} gate(s) open. ` : '';
+
+    setTitleEn(`Water release at ${dam.damName}`);
+    setTitleTl(`Pagpapakawala ng tubig sa ${dam.damName}`);
+    setBodyEn(
+      `${dam.damName} is releasing ${cms}. ${gates}Reservoir level is ${dam.rwl ?? '—'} masl against a spilling level of ${dam.nhwl ?? '—'} masl. Water levels along the Agno River are expected to rise.`,
+    );
+    setBodyTl(
+      `Nagpapakawala ang ${dam.damName} ng ${cms}. ${gates}Ang lebel ng tubig ay ${dam.rwl ?? '—'} masl samantalang ${dam.nhwl ?? '—'} masl ang lebel ng pag-apaw. Inaasahang tataas ang tubig sa Ilog Agno.`,
+    );
+  }
+
+  /**
+   * Ready-to-paste text for the barangay Facebook page.
+   *
+   * In rural Pangasinan that is how information actually travels. The system
+   * is a force-multiplier for the channels people already use, not a
+   * replacement for them.
+   */
+  const facebookText = [
+    `[${severity}] ${titleEn}`,
+    '',
+    bodyEn,
+    '',
+    titleTl,
+    bodyTl,
+    '',
+    'Source: PAGASA Dam Bulletin',
+    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://safe-river-san-manuel.vercel.app',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  async function copyForFacebook() {
+    await navigator.clipboard.writeText(facebookText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  async function publish(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await authedFetch('/api/admin/advisories', {
+        method: 'POST',
+        body: JSON.stringify({
+          severity,
+          category: 'DAM_RELEASE',
+          title: { en: titleEn, tl: titleTl },
+          body: { en: bodyEn, tl: bodyTl },
+          actionAdvice: {
+            en: 'Move to higher ground if you live near the Agno River. Follow your barangay officials.',
+            tl: 'Lumipat sa mataas na lugar kung malapit kayo sa Ilog Agno. Sundin ang inyong barangay officials.',
+          },
+          affectedBarangays: [],
+          notify,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      setResult(
+        notify
+          ? `Advisory published and queued for email (job ${String(body.jobId).slice(0, 8)}).`
+          : 'Advisory published to the site. No email was sent.',
+      );
+      refresh();
+    } catch (err) {
+      setResult(`Failed: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canPublish = titleEn && titleTl && bodyEn && bodyTl && !busy;
+
+  return (
+    <>
+      <PageHeader
+        title="DRRM Console"
+        subtitle={user?.email ?? undefined}
+        action={
+          <Button size="small" startIcon={<LogoutOutlined />} onClick={() => void signOutAdmin()}>
+            Sign out
+          </Button>
+        }
+      />
+
+      {loadError && <Alert severity="error" sx={{ mb: 3 }}>{loadError}</Alert>}
+
+      {/* Failures here are otherwise silent — from the public site a stopped
+          scraper looks exactly like a quiet river. */}
+      {status && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          {[
+            {
+              label: 'Dam scrape',
+              value: status.scrape.ageMinutes != null ? `${status.scrape.ageMinutes} min ago` : 'never',
+              bad: status.scrape.ok === false || (status.scrape.ageMinutes ?? 0) > 120,
+              note: status.scrape.error ?? `${status.scrape.consecutiveFailures} consecutive failures`,
+            },
+            {
+              label: 'Rainfall poll',
+              value: status.rainfall.ageMinutes != null ? `${status.rainfall.ageMinutes} min ago` : 'never',
+              bad: status.rainfall.ok === false || (status.rainfall.ageMinutes ?? 0) > 180,
+              note: 'Refreshes hourly',
+            },
+            {
+              label: 'Email delivery',
+              value: status.email.alertsEnabled ? 'Enabled' : 'DISABLED',
+              bad: !status.email.alertsEnabled,
+              note: status.email.alertsEnabled
+                ? `${status.email.activeSubscribers} subscribers`
+                : 'ALERTS_ENABLED is not true — no email will send',
+            },
+            {
+              label: 'Queue',
+              value: `${status.email.pendingJobs} pending`,
+              bad: status.email.pendingJobs > 5,
+              note: `${status.email.activeSubscribers} active subscribers`,
+            },
+          ].map((c) => (
+            <Grid key={c.label} size={{ xs: 6, md: 3 }}>
+              <Card sx={{ height: '100%', borderColor: c.bad ? 'error.main' : undefined }}>
+                <CardContent>
+                  <Typography variant="caption" color="text.secondary">{c.label}</Typography>
+                  <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', color: c.bad ? 'error.main' : undefined }}>
+                    {c.value}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">{c.note}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>Post an advisory</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+                San Roque announces gate releases on Facebook and in PDFs, which cannot be read
+                automatically. Use this to announce a real release as it happens.
+              </Typography>
+
+              {status && status.agno.length > 0 && (
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', mb: 2.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                    Prefill from:
+                  </Typography>
+                  {status.agno.map((d) => (
+                    <Chip
+                      key={d.damId}
+                      size="small"
+                      label={d.damName}
+                      onClick={() => prefillFromDam(d.damId)}
+                      color={d.isReleasing ? 'error' : 'default'}
+                      variant={d.isReleasing ? 'filled' : 'outlined'}
+                    />
+                  ))}
+                </Stack>
+              )}
+
+              <Box component="form" onSubmit={publish}>
+                <Stack spacing={2}>
+                  <TextField
+                    select
+                    size="small"
+                    label="Severity"
+                    value={severity}
+                    onChange={(e) => setSeverity(e.target.value as typeof severity)}
+                    sx={{ maxWidth: 220 }}
+                  >
+                    {SEVERITIES.map((s) => (
+                      <MenuItem key={s} value={s}>
+                        <Box component="span" sx={{ color: SEVERITY_COLORS[s], fontWeight: 700 }}>{s}</Box>
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField label="Title (English)" value={titleEn} onChange={(e) => setTitleEn(e.target.value)} fullWidth required />
+                  <TextField label="Pamagat (Tagalog)" value={titleTl} onChange={(e) => setTitleTl(e.target.value)} fullWidth required />
+                  <TextField label="Message (English)" value={bodyEn} onChange={(e) => setBodyEn(e.target.value)} fullWidth multiline rows={3} required />
+                  <TextField label="Mensahe (Tagalog)" value={bodyTl} onChange={(e) => setBodyTl(e.target.value)} fullWidth multiline rows={3} required />
+
+                  <FormControlLabel
+                    control={<Switch checked={notify} onChange={(e) => setNotify(e.target.checked)} />}
+                    label={`Send email to ${status?.email.activeSubscribers ?? 0} subscribers`}
+                  />
+
+                  {notify && !status?.email.alertsEnabled && (
+                    <Alert severity="warning">
+                      Email delivery is disabled on this deployment. The advisory will post to the
+                      site but nothing will be sent.
+                    </Alert>
+                  )}
+
+                  {result && (
+                    <Alert severity={result.startsWith('Failed') ? 'error' : 'success'}>{result}</Alert>
+                  )}
+
+                  <Stack direction="row" spacing={1.5}>
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      disabled={!canPublish}
+                      startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <SendOutlined />}
+                    >
+                      {busy ? 'Publishing…' : 'Publish advisory'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<ContentCopyOutlined />}
+                      onClick={() => void copyForFacebook()}
+                      disabled={!titleEn || !bodyEn}
+                    >
+                      {copied ? 'Copied' : 'Copy for Facebook'}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Current readings</Typography>
+              {!status ? (
+                <CircularProgress size={22} />
+              ) : (
+                <Stack spacing={1.5}>
+                  {status.agno.map((d) => (
+                    <Box key={d.damId}>
+                      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{d.damName}</Typography>
+                        <Chip
+                          size="small"
+                          color={d.isReleasing ? 'error' : 'success'}
+                          variant={d.isReleasing ? 'filled' : 'outlined'}
+                          label={d.isReleasing ? 'Releasing' : 'Normal'}
+                        />
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {d.rwl ?? '—'} / {d.nhwl ?? '—'} masl
+                        {d.outflowCms != null && ` · ${d.outflowCms} CMS`}
+                        {d.gatesOpen != null && ` · ${d.gatesOpen} gate(s)`}
+                      </Typography>
+                      <Divider sx={{ mt: 1.5 }} />
+                    </Box>
+                  ))}
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </>
+  );
+}

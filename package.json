@@ -19,7 +19,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "alert:test": "tsx --env-file=.env.local scripts/fire-test-alert.ts",
-    "alerts:reset": "tsx --conditions=react-server --env-file=.env.local scripts/reset-alerts.ts"
+    "alerts:reset": "tsx --conditions=react-server --env-file=.env.local scripts/reset-alerts.ts",
+    "admin:grant": "tsx --conditions=react-server --env-file=.env.local scripts/seed-admin.ts",
+    "admin:list": "tsx --conditions=react-server --env-file=.env.local scripts/seed-admin.ts --list",
+    "admin:revoke": "tsx --conditions=react-server --env-file=.env.local scripts/seed-admin.ts --revoke"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
