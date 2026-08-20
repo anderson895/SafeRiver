@@ -25,14 +25,26 @@ const MAP_STYLE =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? 'https://tiles.openfreemap.org/styles/positron';
 
 /**
+ * Source and layer IDs are CONSTANT across return periods.
+ *
+ * They must not be derived from `returnPeriod`. react-map-gl treats a changed
+ * `id` on a mounted <Source> as a fatal "source id changed" error rather than
+ * a swap. Switching 5yr/25yr/100yr therefore only changes the `data` URL, and
+ * MapLibre reloads the GeoJSON in place.
+ */
+const HAZARD_SOURCE_ID = 'flood-hazard';
+const HAZARD_FILL_ID = 'flood-hazard-fill';
+const BARANGAY_FILL_ID = 'barangay-fill';
+
+/**
  * Colour ramp driven by the Project NOAH `Var` attribute (1=Low, 2=Med, 3=High).
  * Using a data-driven `match` expression means one layer renders all three
  * classes, instead of three separate filtered layers.
  */
-const hazardFill = (id: string): FillLayerSpecification => ({
-  id,
+const hazardFill: FillLayerSpecification = {
+  id: HAZARD_FILL_ID,
   type: 'fill',
-  source: id,
+  source: HAZARD_SOURCE_ID,
   paint: {
     'fill-color': [
       'match',
@@ -44,7 +56,7 @@ const hazardFill = (id: string): FillLayerSpecification => ({
     ],
     'fill-opacity': 0.55,
   },
-});
+};
 
 const boundaryLine: LineLayerSpecification = {
   id: 'boundary-line',
@@ -80,28 +92,28 @@ export default function HazardMap({
 }: HazardMapProps) {
   const [popup, setPopup] = useState<PopupInfo | null>(null);
 
-  const hazardLayerId = useMemo(() => `flood-${returnPeriod}`, [returnPeriod]);
-
-  const onClick = useCallback(
-    (e: MapLayerMouseEvent) => {
-      const features = e.features ?? [];
-      const hazardFeature = features.find((f) => f.layer?.id === hazardLayerId);
-      const barangayFeature = features.find((f) => f.source === 'barangays');
-
-      if (!hazardFeature && !barangayFeature) {
-        setPopup(null);
-        return;
-      }
-
-      setPopup({
-        longitude: e.lngLat.lng,
-        latitude: e.lngLat.lat,
-        hazard: (hazardFeature?.properties?.Var as 1 | 2 | 3 | undefined) ?? null,
-        barangay: (barangayFeature?.properties?.barangay as string | undefined) ?? null,
-      });
-    },
-    [hazardLayerId],
+  const interactiveLayerIds = useMemo(
+    () => (showBarangays ? [HAZARD_FILL_ID, BARANGAY_FILL_ID] : [HAZARD_FILL_ID]),
+    [showBarangays],
   );
+
+  const onClick = useCallback((e: MapLayerMouseEvent) => {
+    const features = e.features ?? [];
+    const hazardFeature = features.find((f) => f.layer?.id === HAZARD_FILL_ID);
+    const barangayFeature = features.find((f) => f.source === 'barangays');
+
+    if (!hazardFeature && !barangayFeature) {
+      setPopup(null);
+      return;
+    }
+
+    setPopup({
+      longitude: e.lngLat.lng,
+      latitude: e.lngLat.lat,
+      hazard: (hazardFeature?.properties?.Var as 1 | 2 | 3 | undefined) ?? null,
+      barangay: (barangayFeature?.properties?.barangay as string | undefined) ?? null,
+    });
+  }, []);
 
   return (
     <div style={{ height, width: '100%', borderRadius: 12, overflow: 'hidden' }}>
@@ -109,21 +121,22 @@ export default function HazardMap({
         initialViewState={{ ...SAN_MANUEL_CENTER, zoom: 11.2 }}
         mapStyle={MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
-        interactiveLayerIds={showBarangays ? [hazardLayerId, 'barangay-fill'] : [hazardLayerId]}
+        interactiveLayerIds={interactiveLayerIds}
         onClick={onClick}
       >
         <NavigationControl position="top-left" />
         <ScaleControl position="bottom-left" />
 
-        <Source id={hazardLayerId} type="geojson" data={`/geo/flood-${returnPeriod}.geojson`}>
-          <Layer {...hazardFill(hazardLayerId)} />
+        {/* Stable id; only `data` changes when the return period is switched. */}
+        <Source id={HAZARD_SOURCE_ID} type="geojson" data={`/geo/flood-${returnPeriod}.geojson`}>
+          <Layer {...hazardFill} />
         </Source>
 
         {showBarangays && (
           <Source id="barangays" type="geojson" data="/geo/barangays.geojson">
             {/* Invisible fill purely to give barangays a click target. */}
             <Layer
-              id="barangay-fill"
+              id={BARANGAY_FILL_ID}
               type="fill"
               source="barangays"
               paint={{ 'fill-color': '#000000', 'fill-opacity': 0 }}
