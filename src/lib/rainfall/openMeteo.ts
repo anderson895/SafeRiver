@@ -94,7 +94,10 @@ export interface RainfallSnapshot {
   location: { lat: number; lon: number; name: string };
   current: {
     time: string | null;
+    /** Sum of the preceding hour, comparable to the PAGASA mm/hr scale. */
     precipitationMmHr: number | null;
+    /** Raw 15-minute figure from the API. Display only — do not classify. */
+    last15MinMm: number | null;
     temperature: number | null;
     weatherCode: number | null;
     isDay: boolean | null;
@@ -165,14 +168,34 @@ export async function fetchRainfall(now: Date = new Date()): Promise<RainfallSna
   const next3 = nums(future.slice(0, 3).map((h) => h.precipitationMm));
   const next24 = nums(future.slice(0, 24).map((h) => h.precipitationMm));
 
-  const currentPrecip = data.current?.precipitation ?? data.current?.rain ?? null;
+  /**
+   * Hourly rate for the CURRENT hour, taken from the hourly series.
+   *
+   * NOT `current.precipitation`. Open-Meteo documents the `current` block as a
+   * backward-looking sum over its `interval`, which is 900 s — fifteen minutes,
+   * not an hour. Treating that as mm/hr understates rainfall four-fold, and
+   * because the same figure was fed to the PAGASA classifier it moved every
+   * threshold up by 4x: the Yellow band (7.5 mm/hr) would not have fired until
+   * 30 mm/hr, and Red (30 mm/hr) not until 120 mm/hr. The observed-rainfall
+   * alert path was effectively dead.
+   *
+   * `hourly.precipitation` is documented as the sum of the preceding hour, so
+   * it is directly comparable to PAGASA's mm/hr scale.
+   */
+  const currentHourIndex = hourly.findIndex((h) => h.t.slice(0, 13) === nowIso);
+  const observedMmHr =
+    currentHourIndex >= 0 ? hourly[currentHourIndex].precipitationMm : null;
+
+  /** The raw 15-minute figure, kept for display only — never classified. */
+  const last15MinMm = data.current?.precipitation ?? data.current?.rain ?? null;
 
   return {
     fetchedAt: now,
     location: { lat: SAN_MANUEL.lat, lon: SAN_MANUEL.lon, name: SAN_MANUEL.name },
     current: {
       time: data.current?.time ?? null,
-      precipitationMmHr: currentPrecip,
+      precipitationMmHr: observedMmHr,
+      last15MinMm,
       temperature: data.current?.temperature_2m ?? null,
       weatherCode: data.current?.weather_code ?? null,
       isDay: data.current?.is_day == null ? null : data.current.is_day === 1,
@@ -184,8 +207,8 @@ export async function fetchRainfall(now: Date = new Date()): Promise<RainfallSna
         precipitationSumMm: data.daily!.precipitation_sum[i] ?? null,
         precipitationHours: data.daily!.precipitation_hours?.[i] ?? null,
       })) ?? [],
-    intensityClass: classifyIntensity(currentPrecip),
-    pagasaWarning: classifyPagasaWarning(currentPrecip),
+    intensityClass: classifyIntensity(observedMmHr),
+    pagasaWarning: classifyPagasaWarning(observedMmHr),
     maxNext3hMm: next3.length ? Math.max(...next3) : null,
     next24hTotalMm: next24.length ? Number(next24.reduce((a, b) => a + b, 0).toFixed(2)) : null,
     riverDischargeCms: await fetchRiverDischarge(),

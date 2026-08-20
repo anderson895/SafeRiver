@@ -171,6 +171,12 @@ export default function RainfallPage() {
                 <Typography variant="subtitle2" sx={{ mt: 0.5, fontWeight: 700 }}>
                   {dict.intensity[data.intensityClass]}
                 </Typography>
+                {/* "Current Rainfall" implied a measurement. Nothing here is
+                    measured — DOST-ASTI operates rain gauges but exposes no
+                    public API, so this is a model estimate for the grid cell. */}
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  {dict.rainfall.modelledNote}
+                </Typography>
 
                 <Stack spacing={1.25} sx={{ mt: 2.5 }}>
                   <Divider />
