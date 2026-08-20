@@ -14,7 +14,8 @@
     "gis:build": "node --max-old-space-size=8192 scripts/gis/build-layers.mjs",
     "smoke:scrape": "tsx scripts/smoke-scrape.ts --live",
     "smoke:email": "tsx --conditions=react-server --env-file=.env.local scripts/smoke-email.ts",
-    "db:status": "tsx --conditions=react-server --env-file=.env.local scripts/db-status.ts"
+    "db:status": "tsx --conditions=react-server --env-file=.env.local scripts/db-status.ts",
+    "screenshots": "tsx scripts/screenshots.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -44,6 +45,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "mapshaper": "^0.7.54",
+    "playwright": "^1.62.1",
     "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.11"
