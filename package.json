@@ -17,7 +17,8 @@
     "db:status": "tsx --conditions=react-server --env-file=.env.local scripts/db-status.ts",
     "screenshots": "tsx scripts/screenshots.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "alert:test": "tsx --env-file=.env.local scripts/fire-test-alert.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
