@@ -5,6 +5,7 @@ import Map, { Layer, Source, Popup, NavigationControl, ScaleControl, type MapLay
 import { setWorkerUrl, type FillLayerSpecification, type LineLayerSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { HAZARD_COLORS, HAZARD_LABELS } from '@/theme/theme';
+import { UNMAPPED_BARANGAYS } from '@/content/hazard-coverage';
 
 /**
  * Point MapLibre at the worker we serve from /public (synced by
@@ -70,6 +71,30 @@ const barangayLine: LineLayerSpecification = {
   type: 'line',
   source: 'barangays',
   paint: { 'line-color': '#546E7A', 'line-width': 0.8, 'line-opacity': 0.7 },
+};
+
+/**
+ * Barangays the hazard survey never covered.
+ *
+ * Rendered as a distinct grey fill rather than left blank. Blank is read as
+ * "no danger", and for San Roque, Lapalo and Narra — about two-thirds of the
+ * municipality, including the barangay containing the dam — that reading is
+ * wrong. They were not surveyed, not found safe.
+ */
+const notMappedFill: FillLayerSpecification = {
+  id: 'not-mapped-fill',
+  type: 'fill',
+  source: 'barangays',
+  filter: ['in', ['get', 'barangay'], ['literal', [...UNMAPPED_BARANGAYS]]],
+  paint: { 'fill-color': '#9E9E9E', 'fill-opacity': 0.28 },
+};
+
+const notMappedLine: LineLayerSpecification = {
+  id: 'not-mapped-line',
+  type: 'line',
+  source: 'barangays',
+  filter: ['in', ['get', 'barangay'], ['literal', [...UNMAPPED_BARANGAYS]]],
+  paint: { 'line-color': '#616161', 'line-width': 1.2, 'line-dasharray': [2, 2] },
 };
 
 interface PopupInfo {
@@ -141,6 +166,8 @@ export default function HazardMap({
               source="barangays"
               paint={{ 'fill-color': '#000000', 'fill-opacity': 0 }}
             />
+            <Layer {...notMappedFill} />
+            <Layer {...notMappedLine} />
             <Layer {...barangayLine} />
           </Source>
         )}
@@ -174,6 +201,12 @@ export default function HazardMap({
                     }}
                   />
                   {HAZARD_LABELS[popup.hazard].en}
+                </div>
+              ) : popup.barangay && (UNMAPPED_BARANGAYS as readonly string[]).includes(popup.barangay) ? (
+                // Distinguishing these two cases is the whole point: one means
+                // surveyed and low, the other means never surveyed.
+                <div style={{ color: '#B26A00', fontWeight: 600 }}>
+                  Not surveyed — no hazard mapping exists for this barangay
                 </div>
               ) : (
                 <div style={{ color: '#666' }}>No mapped flood hazard here</div>

@@ -36,8 +36,9 @@ export const en = {
     medium: 'Medium (0.5–1.5 m)',
     high: 'High (more than 1.5 m)',
     none: 'No mapped flood hazard here',
+    notMapped: 'Not mapped',
     dataGapNotice:
-      'Flood hazard mapping does not cover the northern upland portion of San Manuel. Absence of colour there means "not mapped", not "safe".',
+      'Barangays San Roque, Lapalo and Narra have no flood hazard mapping — roughly two-thirds of San Manuel by area. They are shown hatched. Absence of colour there means NOT SURVEYED, not safe.',
   },
   water: {
     title: 'Water Level Monitoring',

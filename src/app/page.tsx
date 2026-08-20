@@ -79,6 +79,20 @@ export default function DashboardPage() {
                       <Typography variant="caption">{label}</Typography>
                     </Stack>
                   ))}
+                  {/* Unsurveyed area needs its own key, or grey reads as "safe". */}
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                    <Box
+                      sx={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: 0.5,
+                        bgcolor: '#9E9E9E',
+                        opacity: 0.45,
+                        border: '1px dashed #616161',
+                      }}
+                    />
+                    <Typography variant="caption">{dict.hazard.notMapped}</Typography>
+                  </Stack>
                 </Stack>
               </Stack>
 

@@ -40,8 +40,9 @@ export const tl: Dictionary = {
     medium: 'Katamtaman (0.5–1.5 m)',
     high: 'Mataas (higit 1.5 m)',
     none: 'Walang nakamapang panganib sa baha dito',
+    notMapped: 'Walang mapa',
     dataGapNotice:
-      'Hindi sakop ng mapa ang hilagang mataas na bahagi ng San Manuel. Ang kawalan ng kulay doon ay nangangahulugang "hindi nakamapa", hindi "ligtas".',
+      'Ang Barangay San Roque, Lapalo at Narra ay walang mapa ng panganib sa baha — halos dalawang-katlo ng San Manuel. Nakaguhit-guhit ang mga ito. Ang kawalan ng kulay doon ay nangangahulugang HINDI PA NASUSUKAT, hindi ligtas.',
   },
   water: {
     title: 'Pagsubaybay sa Lebel ng Tubig',
