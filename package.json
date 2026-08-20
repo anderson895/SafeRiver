@@ -2,6 +2,9 @@
   "name": "sanmanuel-flood-info",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "predev": "node scripts/copy-maplibre-worker.mjs",
     "dev": "next dev",

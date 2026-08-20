@@ -149,10 +149,22 @@ instead.
 
 | Tool | Version | Notes |
 |---|---|---|
-| Node.js | **20.6+** | Verified on 22.14.0. The scripts use `--env-file`, added in 20.6 |
+| Node.js | **22.x** | Pinned in `engines`. Not optional — see below |
 | npm | 10+ | Verified on 11.4.2 |
 | Git | any | |
 | Python | 3.9+ | **Only** for `npm run docs:docx`. Not needed to run the app |
+
+> **Node 22 is a hard requirement, and the reason is not obvious.**
+>
+> `firebase-admin` → `jwks-rsa` → `jose@6`, and `jose@6` is ESM-only while
+> `jwks-rsa` is CommonJS and `require()`s it. Node 22 permits `require()` of an
+> ES module; Node 20 throws `ERR_REQUIRE_ESM`.
+>
+> The failure is invisible in development. It takes down the whole
+> `firebase-admin/auth` module, so every admin route returns **500 with an empty
+> body** — no message, no stack — while every public route keeps working,
+> because only the admin path touches Auth. `engines` pins it so Vercel matches
+> what you develop against.
 
 A Google account is required for Firebase, and a second (or the same) with
 2-Step Verification enabled for Gmail SMTP.
@@ -313,6 +325,9 @@ npm run db:status
 ### Vercel
 
 1. Import the repository at <https://vercel.com/new>.
+1. **Settings → General → Node.js Version → 22.x.** `engines` in
+   `package.json` requests this, but an existing project keeps whatever it was
+   created with. On Node 20 the admin console returns an empty 500.
 2. **Settings → Environment Variables** — add every variable from `.env.local`,
    with two changes:
    - `NEXT_PUBLIC_SITE_URL` = your production URL
@@ -386,6 +401,7 @@ hazard geometry escapes the municipal boundary.
 | Symptom | Cause |
 |---|---|
 | Map renders blank, only a MIME warning | MapLibre worker missing. `node scripts/copy-maplibre-worker.mjs` |
+| Admin routes 500 with an **empty body**, public routes fine | Deployment is on Node 20. `jose@6` is ESM, `jwks-rsa` `require()`s it → `ERR_REQUIRE_ESM` kills `firebase-admin/auth`. Set the runtime to **22.x** |
 | `The default Firebase app does not exist` | `getAuth()` called before `db()`. Pass the app: `getAuth(adminApp())` |
 | `This account is not an administrator` | Auth account exists but has no `adminUsers` document. Run `admin:grant` |
 | Advisory publishes but no email arrives | `ALERTS_ENABLED` is not `true`, or nothing drained the queue. `npm run alerts:send` |
