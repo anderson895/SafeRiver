@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -13,6 +16,8 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Skeleton from '@mui/material/Skeleton';
 import Alert from '@mui/material/Alert';
 import PageHeader from '@/components/common/PageHeader';
+import AlertCard from '@/components/alerts/AlertCard';
+import { useAlerts } from '@/components/alerts/useAlerts';
 import { HAZARD_COLORS } from '@/theme/theme';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { ReturnPeriod } from '@/components/map/HazardMap';
@@ -26,6 +31,7 @@ const HazardMap = dynamic(() => import('@/components/map/HazardMap'), {
 export default function DashboardPage() {
   const { dict } = useI18n();
   const [returnPeriod, setReturnPeriod] = useState<ReturnPeriod>('100yr');
+  const { alerts, activeCount, loading: alertsLoading } = useAlerts(10);
 
   const legend = [
     { v: 1 as const, label: dict.hazard.low },
@@ -96,19 +102,46 @@ export default function DashboardPage() {
         <Grid size={{ xs: 12, lg: 4 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                {dict.dashboard.latestAlerts}
-              </Typography>
-
               <Stack
-                spacing={1}
-                sx={{ alignItems: 'center', textAlign: 'center', py: 6, color: 'text.secondary' }}
+                direction="row"
+                sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 2 }}
               >
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {dict.dashboard.noAlerts}
-                </Typography>
-                <Typography variant="caption">{dict.dashboard.noAlertsHint}</Typography>
+                <Typography variant="h6">{dict.dashboard.latestAlerts}</Typography>
+                {activeCount > 0 && (
+                  <Chip
+                    size="small"
+                    color="error"
+                    label={dict.a11y.alertCount.replace('{count}', String(activeCount))}
+                  />
+                )}
               </Stack>
+
+              {alertsLoading ? (
+                <Stack spacing={1.5}>
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} variant="rectangular" height={92} sx={{ borderRadius: 2 }} />
+                  ))}
+                </Stack>
+              ) : alerts.length === 0 ? (
+                <Stack
+                  spacing={1}
+                  sx={{ alignItems: 'center', textAlign: 'center', py: 6, color: 'text.secondary' }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {dict.dashboard.noAlerts}
+                  </Typography>
+                  <Typography variant="caption">{dict.dashboard.noAlertsHint}</Typography>
+                </Stack>
+              ) : (
+                <Stack spacing={1.5}>
+                  {alerts.slice(0, 5).map((a) => (
+                    <AlertCard key={a.id} alert={a} compact />
+                  ))}
+                  <Button component={Link} href="/alerts" size="small" sx={{ alignSelf: 'flex-start' }}>
+                    {dict.common.viewAll}
+                  </Button>
+                </Stack>
+              )}
             </CardContent>
           </Card>
         </Grid>

@@ -15,7 +15,9 @@
     "smoke:scrape": "tsx scripts/smoke-scrape.ts --live",
     "smoke:email": "tsx --conditions=react-server --env-file=.env.local scripts/smoke-email.ts",
     "db:status": "tsx --conditions=react-server --env-file=.env.local scripts/db-status.ts",
-    "screenshots": "tsx scripts/screenshots.ts"
+    "screenshots": "tsx scripts/screenshots.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

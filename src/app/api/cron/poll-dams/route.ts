@@ -1,11 +1,14 @@
 import { cronGuard } from '@/lib/auth/verifyCron';
 import { fetchPagasaFlood, DamReadingSchema } from '@/lib/scrape/pagasaDams';
-import { AGNO_DAM_IDS } from '@/lib/scrape/damRegistry';
+import { AGNO_DAM_IDS, getDam } from '@/lib/scrape/damRegistry';
 import {
   persistReading,
   recordScrapeHealth,
   bumpScrapeFailureCount,
 } from '@/lib/firebase/damRepository';
+import { evaluateReservoirLevel, evaluateRelease, type DamRuleInput } from '@/lib/alerts/rules';
+import { processSignals } from '@/lib/alerts/alertRepository';
+import type { Signal } from '@/lib/alerts/types';
 
 // cheerio + firebase-admin are Node-only; they cannot run on the Edge runtime.
 export const runtime = 'nodejs';
@@ -63,6 +66,44 @@ export async function POST(req: Request) {
     const persisted = await Promise.all(result.readings.map(persistReading));
     const newObservations = persisted.filter((p) => p.isNewObservation).length;
 
+    // ---- Alert evaluation ------------------------------------------------
+    // Only the Agno cascade drives alerts for San Manuel; the other six dams
+    // are stored for completeness but are on unrelated river systems.
+    const signals: Signal[] = [];
+    const consideredKeys: string[] = [];
+
+    for (const reading of result.readings) {
+      if (!AGNO_DAM_IDS.includes(reading.damId)) continue;
+      const meta = getDam(reading.damId);
+
+      const input: DamRuleInput = {
+        damId: reading.damId,
+        damName: reading.damName,
+        isAgno: true,
+        // San Roque is the downstream dam that discharges into San Manuel.
+        isDownstream: reading.damId === 'san-roque',
+        rwl: reading.rwl,
+        nhwl: reading.nhwl ?? meta.nhwl ?? null,
+        rwlDeviation24h: reading.rwlDeviation24h,
+        gatesOpen: reading.gatesOpen,
+        outflowCms: reading.outflowCms,
+        observedAt: reading.observedAt.toISOString(),
+      };
+
+      // Every key is registered as "considered" even when no signal fires, so
+      // a condition that stops can still reach its all-clear.
+      consideredKeys.push(`DAM_RELEASE:${reading.damId}:outflow`);
+      consideredKeys.push(`WATER_LEVEL:${reading.damId}:rwl`);
+      consideredKeys.push(`WATER_LEVEL:${reading.damId}:rwlDeviation24h`);
+
+      const level = evaluateReservoirLevel(input);
+      if (level) signals.push(level);
+      const release = evaluateRelease(input);
+      if (release) signals.push(release);
+    }
+
+    const alerts = await processSignals(signals, consideredKeys, startedAt);
+
     await recordScrapeHealth({
       ok: true,
       at: startedAt,
@@ -78,6 +119,11 @@ export async function POST(req: Request) {
       agnoBasin: result.agnoBasin?.status ?? null,
       agnoSubBasin: result.agnoSubBasin?.status ?? null,
       dams: persisted.map((p) => ({ damId: p.damId, trend: p.trend, isNew: p.isNewObservation })),
+      alerts: {
+        signalsRaised: signals.length,
+        fired: alerts.fired,
+        suppressed: alerts.suppressed.length,
+      },
       durationMs: Date.now() - startedAt.getTime(),
     });
   } catch (err) {
