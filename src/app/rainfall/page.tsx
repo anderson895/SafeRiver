@@ -14,6 +14,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import PageHeader from '@/components/common/PageHeader';
+import StaleDataNotice from '@/components/common/StaleDataNotice';
 import { StatBig } from '@/components/common/StatBig';
 import RainfallForecastChart, { type HourlyPoint } from '@/components/rainfall/RainfallForecastChart';
 import IntensityScale from '@/components/rainfall/IntensityScale';
@@ -114,6 +115,16 @@ export default function RainfallPage() {
             }}
           />
         }
+      />
+
+      {/* Tighter threshold than the dam pages. PAGASA publishes its bulletin
+          once a day, so dam data being hours old is normal; the rainfall feed
+          refreshes hourly, so the same age means the poll has stopped. Showing
+          "No rain" from six hours ago during a storm is the failure this
+          system exists to prevent. */}
+      <StaleDataNotice
+        ageHours={data.ageMinutes != null ? data.ageMinutes / 60 : null}
+        thresholdHours={3}
       />
 
       <Grid container spacing={3}>
