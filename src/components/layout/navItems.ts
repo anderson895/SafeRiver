@@ -4,6 +4,7 @@ import ShowChartOutlined from '@mui/icons-material/ShowChartOutlined';
 import WavesOutlined from '@mui/icons-material/WavesOutlined';
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined';
 import NotificationsActiveOutlined from '@mui/icons-material/NotificationsActiveOutlined';
+import MarkEmailUnreadOutlined from '@mui/icons-material/MarkEmailUnreadOutlined';
 import type { SvgIconComponent } from '@mui/icons-material';
 import type { Dictionary } from '@/i18n/dictionaries/en';
 
@@ -21,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/dam-advisory', icon: WavesOutlined, label: (d) => d.nav.damAdvisory },
   { href: '/flood-info', icon: MenuBookOutlined, label: (d) => d.nav.floodInfo },
   { href: '/alerts', icon: NotificationsActiveOutlined, label: (d) => d.nav.alerts },
+  { href: '/subscribe', icon: MarkEmailUnreadOutlined, label: (d) => d.nav.subscribe },
 ];
 
 export const DRAWER_WIDTH = 248;

@@ -2,6 +2,7 @@ import 'server-only';
 import { db, COLLECTIONS, Timestamp } from '@/lib/firebase/admin';
 import { decide, applyCompoundEscalation } from './evaluate';
 import { compose } from './compose';
+import { queueAlertEmail } from '@/lib/email/dispatcher';
 import { emptyState, type AlertState, type Signal, type Severity } from './types';
 
 /** Firestore document IDs cannot contain '/', which signal keys use ':' instead. */
@@ -118,6 +119,19 @@ export async function processSignals(
   });
 
   await batch.commit();
+
+  // Queue fan-out only AFTER the alerts are durably written. Queueing inside
+  // the batch would risk a job pointing at an alert that never got committed.
+  for (const fired of result.fired) {
+    try {
+      await queueAlertEmail(fired.alertId, now);
+    } catch (err) {
+      // A queueing failure must not fail the whole scrape — the alert itself
+      // is already saved and visible on the site.
+      console.error(`[alerts] could not queue email for ${fired.alertId}: ${(err as Error).message}`);
+    }
+  }
+
   return result;
 }
 
