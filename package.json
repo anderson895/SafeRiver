@@ -15,6 +15,7 @@
     "smoke:scrape": "tsx scripts/smoke-scrape.ts --live",
     "smoke:email": "tsx --conditions=react-server --env-file=.env.local scripts/smoke-email.ts",
     "db:status": "tsx --conditions=react-server --env-file=.env.local scripts/db-status.ts",
+    "poll": "tsx --env-file=.env.local scripts/poll-now.ts",
     "screenshots": "tsx scripts/screenshots.ts",
     "docs:docx": "python scripts/build-docx.py",
     "test": "vitest run",
