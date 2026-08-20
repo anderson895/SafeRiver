@@ -5,7 +5,6 @@ import Map, { Layer, Source, NavigationControl, ScaleControl } from 'react-map-g
 import { setWorkerUrl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
 import Slider from '@mui/material/Slider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -78,7 +77,22 @@ export default function RainfallMap({
     : null;
 
   return (
-    <Box sx={{ position: 'relative', height, width: '100%', borderRadius: 3, overflow: 'hidden' }}>
+    // Fills whatever height the parent gives it, so the map card can be made
+    // to match the neighbouring column instead of ending short of it.
+    <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* The time control sits below the map rather than floating over it. As
+          an overlay it covered map area and collided with the scale bar and
+          the attribution, while space beneath the card went unused. */}
+      <Box
+        sx={{
+          position: 'relative',
+          flexGrow: 1,
+          minHeight: height,
+          width: '100%',
+          borderRadius: 3,
+          overflow: 'hidden',
+        }}
+      >
       <Map
         initialViewState={{ ...SAN_MANUEL_CENTER, zoom: 7.6 }}
         mapStyle={MAP_STYLE}
@@ -124,20 +138,16 @@ export default function RainfallMap({
           />
         </Source>
       </Map>
+      </Box>
 
       {frames.length > 1 && (
-        <Paper
-          elevation={3}
-          // Raised clear of MapLibre's attribution bar, which sits flush to
-          // the bottom edge of the canvas.
-          sx={{ position: 'absolute', left: 12, right: 12, bottom: 30, px: 2, py: 1, borderRadius: 2 }}
-        >
+        <Box sx={{ mt: 1.5 }}>
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
             <Box sx={{ minWidth: 96 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
                 Radar time
               </Typography>
-              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
                 {label}
               </Typography>
             </Box>
@@ -150,22 +160,17 @@ export default function RainfallMap({
               aria-label="Radar time"
               marks
             />
-            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', minWidth: 58, textAlign: 'right' }}>
               {index === frames.length - 1 ? 'latest' : `${frames.length - 1 - index} back`}
             </Typography>
           </Stack>
-        </Paper>
+        </Box>
       )}
 
       {!radar && (
-        <Paper
-          elevation={3}
-          sx={{ position: 'absolute', left: 12, bottom: 12, px: 2, py: 1, borderRadius: 2 }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            Radar imagery unavailable right now.
-          </Typography>
-        </Paper>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
+          Radar imagery unavailable right now.
+        </Typography>
       )}
     </Box>
   );

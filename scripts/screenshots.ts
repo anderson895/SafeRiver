@@ -38,6 +38,14 @@ interface PageSpec {
   path: string;
   name: string;
   /**
+   * Set for any page containing a MapLibre canvas.
+   *
+   * This was previously inferred as `path === '/'`, which quietly captured
+   * /rainfall while its map was still the loading skeleton — the documentation
+   * showed a grey box where the radar should be.
+   */
+  hasMap?: boolean;
+  /**
    * Extra captures taken after clicking a tab. Without these, a tabbed page
    * only ever documents its default tab — which on /rainfall would omit the
    * 24-hour forecast chart, the one genuinely hourly visual in the system.
@@ -46,10 +54,11 @@ interface PageSpec {
 }
 
 const PAGES: PageSpec[] = [
-  { path: '/', name: 'dashboard' },
+  { path: '/', name: 'dashboard', hasMap: true },
   {
     path: '/rainfall',
     name: 'rainfall',
+    hasMap: true,
     tabs: [{ label: 'Rainfall Data|Datos ng Ulan', name: 'rainfall-data' }],
   },
   { path: '/water-level', name: 'water-level' },
@@ -65,14 +74,37 @@ const PAGES: PageSpec[] = [
   { path: '/about', name: 'about' },
 ];
 
-/** The map needs its tiles and GeoJSON settled before it is worth capturing. */
+/**
+ * Waits for real content, not for a fixed duration.
+ *
+ * A timeout was tried first and produced documentation showing loading
+ * skeletons: /rainfall fetches radar frames server-side, so it can take longer
+ * than any interval short enough to be worth waiting. Worse, the map's own tile
+ * requests keep the connection busy, so `networkidle` never fires and its
+ * rejection was being swallowed.
+ *
+ * Waiting on the absence of skeletons and the presence of a painted canvas is
+ * both faster in the common case and correct in the slow one.
+ */
 async function settle(page: Page, isMapPage: boolean) {
   await page.waitForLoadState('networkidle').catch(() => {});
+
+  // Every loading state in the app renders MuiSkeleton; when none remain, the
+  // data has arrived.
+  await page
+    .waitForFunction(() => document.querySelectorAll('.MuiSkeleton-root').length === 0, null, {
+      timeout: 20_000,
+    })
+    .catch(() => console.warn('    (skeletons still present at capture time)'));
+
   if (isMapPage) {
-    // MapLibre paints asynchronously after the GeoJSON parses in its worker.
-    await page.waitForTimeout(3500);
+    await page
+      .waitForSelector('canvas.maplibregl-canvas', { timeout: 20_000 })
+      .catch(() => console.warn('    (no map canvas found)'));
+    // MapLibre paints asynchronously after the worker parses the GeoJSON.
+    await page.waitForTimeout(2500);
   } else {
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(400);
   }
 }
 
@@ -101,7 +133,7 @@ async function capture(browser: Browser, lang: 'en' | 'tl') {
       const url = `${BASE_URL}${spec.path}`;
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-        await settle(page, spec.path === '/');
+        await settle(page, Boolean(spec.hasMap));
 
         const order = String(i + 1).padStart(2, '0');
         const file = join(dir, `${order}-${spec.name}.png`);
@@ -172,11 +204,37 @@ async function main() {
   console.log(`Capturing ${BASE_URL}\n`);
   checkNavCoverage();
 
-  // Fail fast with a clear message instead of 24 confusing timeouts.
-  try {
-    const res = await fetch(BASE_URL, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  } catch {
+  // Fail fast with a clear message instead of a page of confusing timeouts.
+  //
+  // Probes IPv4 and IPv6 literals as well as the given host. `next dev` binds
+  // to `::`, and on Windows there is no IPv4 listener behind it; Node 17+
+  // resolves "localhost" verbatim, gets 127.0.0.1 first, and hangs. curl and
+  // Chromium both try each address in turn, so the app was serving fine while
+  // this check declared it down.
+  const probes = [
+    BASE_URL,
+    BASE_URL.replace('localhost', '127.0.0.1'),
+    BASE_URL.replace('localhost', '[::1]'),
+  ];
+  // Retries with a generous timeout: `next dev` compiles a route on first
+  // request, and a cold start regularly takes longer than a few seconds. A
+  // short single-shot probe reported the app as down purely because it was
+  // still building.
+  let reachable = false;
+  outer: for (let attempt = 0; attempt < 3 && !reachable; attempt += 1) {
+    for (const probe of new Set(probes)) {
+      try {
+        const res = await fetch(probe, { signal: AbortSignal.timeout(20_000) });
+        if (res.ok) {
+          reachable = true;
+          break outer;
+        }
+      } catch {
+        // Try the next candidate, then retry the round.
+      }
+    }
+  }
+  if (!reachable) {
     console.error(`Cannot reach ${BASE_URL}. Start the app first (npm run dev).`);
     process.exit(1);
   }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
@@ -79,10 +80,39 @@ export default function RainfallPage() {
   }, []);
 
   if (!settled) {
+    // Mirrors the real two-column layout. A single full-width block bore no
+    // resemblance to what loads in, so the page visibly jumped once data
+    // arrived — on a slow rural connection that jump is the whole experience.
     return (
       <>
         <PageHeader title={dict.rainfall.title} subtitle={dict.app.tagline} />
-        <Skeleton variant="rectangular" height={480} sx={{ borderRadius: 3 }} />
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, lg: 8 }}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent>
+                <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
+                  <Skeleton variant="text" width={110} height={32} />
+                  <Skeleton variant="text" width={110} height={32} />
+                </Stack>
+                <Skeleton variant="rectangular" height={460} sx={{ borderRadius: 3 }} />
+                <Skeleton variant="text" width="45%" sx={{ mt: 1.5 }} />
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <Stack spacing={3}>
+              {[190, 130, 220].map((h, i) => (
+                <Card key={i}>
+                  <CardContent>
+                    <Skeleton variant="text" width="55%" />
+                    <Skeleton variant="rectangular" height={h - 60} sx={{ mt: 1, borderRadius: 2 }} />
+                  </CardContent>
+                </Card>
+              ))}
+            </Stack>
+          </Grid>
+        </Grid>
       </>
     );
   }
@@ -128,16 +158,19 @@ export default function RainfallPage() {
       />
 
       <Grid container spacing={3}>
+        {/* Both columns stretch to the taller of the two, and the map grows to
+            fill whatever height that turns out to be. Hard-coding a map height
+            to match would only hold at one viewport width. */}
         <Grid size={{ xs: 12, lg: 8 }}>
-          <Card>
-            <CardContent>
+          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
               <Tabs value={tab} onChange={(_, v: number) => setTab(v)} sx={{ mb: 2 }}>
                 <Tab label={dict.rainfall.mapTab} />
                 <Tab label={dict.rainfall.dataTab} />
               </Tabs>
 
               {tab === 0 ? (
-                <>
+                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                   <RainfallMap radar={data.radar} />
                   {/* An empty radar layer means "no returns available", not
                       "no rain" — say so rather than letting a clear map be
@@ -147,14 +180,14 @@ export default function RainfallPage() {
                       ? 'Radar mula sa RainViewer. Kung walang kulay, maaaring walang available na radar — hindi ibig sabihing walang ulan. Ang forecast sa gilid ang batayan ng mga babala.'
                       : 'Radar imagery from RainViewer. An empty radar does not confirm "no rain" — it may simply mean no returns are available. The forecast figures alongside are what drive the alerts.'}
                   </Typography>
-                </>
+                </Box>
               ) : (
-                <>
+                <Box sx={{ flexGrow: 1 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
                     {dict.rainfall.forecast} — {dict.rainfall.next24h}
                   </Typography>
                   <RainfallForecastChart hourly={data.hourly} hours={24} />
-                </>
+                </Box>
               )}
             </CardContent>
           </Card>
