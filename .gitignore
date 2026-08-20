@@ -33,9 +33,21 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# secrets — NEVER commit. This repo is intended to be public so that
+# GitHub Actions scheduled workflows stay free (see .github/workflows/poll.yml).
+credentials.txt
+*credentials*.json
+serviceAccount*.json
+*.key
+
+# GIS working directory — raw NOAH downloads are ~130 MB and are
+# reproducible via scripts/gis/run_all.sh. Only the built .pmtiles is committed.
+/data/
+
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+details.txt
