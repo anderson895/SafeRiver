@@ -49,6 +49,16 @@ serviceAccount*.json
 # are committed.
 /data/
 
+# Documentation screenshots — generated, never committed.
+#
+# `npm run screenshots` rewrites all ~32 images on every run, and because each
+# frame contains a live clock and live readings, every byte differs. Nothing
+# dedupes, so each run added ~7 MB of permanent history: 417 blobs across 15
+# commits, and an 89 MB push.
+#
+# Regenerate them on demand instead. They are documentation output, not source.
+/screenshot/
+
 # Vendored MapLibre worker, copied out of node_modules by
 # scripts/copy-maplibre-worker.mjs on postinstall/predev/prebuild.
 # Deliberately NOT committed: a checked-in copy would drift from the installed
