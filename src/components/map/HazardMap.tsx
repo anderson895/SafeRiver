@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import Map, { Layer, Source, Popup, NavigationControl, ScaleControl, type MapLayerMouseEvent } from 'react-map-gl/maplibre';
-import { setWorkerUrl, type FillLayerSpecification, type LineLayerSpecification } from 'maplibre-gl';
+import { setWorkerUrl, type FillLayerSpecification, type LineLayerSpecification, type Map as MapLibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { HAZARD_COLORS, HAZARD_LABELS } from '@/theme/theme';
 import { UNMAPPED_BARANGAYS } from '@/content/hazard-coverage';
@@ -81,12 +81,47 @@ const barangayLine: LineLayerSpecification = {
  * municipality, including the barangay containing the dam — that reading is
  * wrong. They were not surveyed, not found safe.
  */
+/** Pattern id registered on the map at load time. */
+const HATCH_IMAGE_ID = 'not-mapped-hatch';
+
+/**
+ * Diagonal hatch marking "no data".
+ *
+ * A flat grey fill was tried first and did not work: the basemap already
+ * shades terrain and the reservoir in grey up north, so two different greys
+ * sat side by side meaning different things, and a reader could not tell
+ * "unsurveyed" from "hillside". Hatching is the cartographic convention for
+ * absent data precisely because it cannot be mistaken for a landcover tint.
+ */
+function makeHatchImage(size = 16): ImageData {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = 'rgba(120,120,120,0.14)';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = 'rgba(70,70,70,0.55)';
+  ctx.lineWidth = 1.6;
+  // Draw twice, offset, so the stripes tile seamlessly across tile edges.
+  for (let i = -size; i < size * 2; i += 6) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + size, size);
+    ctx.stroke();
+  }
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
 const notMappedFill: FillLayerSpecification = {
   id: 'not-mapped-fill',
   type: 'fill',
   source: 'barangays',
   filter: ['in', ['get', 'barangay'], ['literal', [...UNMAPPED_BARANGAYS]]],
-  paint: { 'fill-color': '#9E9E9E', 'fill-opacity': 0.28 },
+  paint: { 'fill-pattern': HATCH_IMAGE_ID },
 };
 
 const notMappedLine: LineLayerSpecification = {
@@ -122,6 +157,15 @@ export default function HazardMap({
     [showBarangays],
   );
 
+  // The hatch must exist before the layer that references it paints, so it is
+  // registered on load rather than in an effect.
+  const onLoad = useCallback((e: { target: MapLibreMap }) => {
+    const map = e.target;
+    if (!map.hasImage(HATCH_IMAGE_ID)) {
+      map.addImage(HATCH_IMAGE_ID, makeHatchImage(), { pixelRatio: 2 });
+    }
+  }, []);
+
   const onClick = useCallback((e: MapLayerMouseEvent) => {
     const features = e.features ?? [];
     const hazardFeature = features.find((f) => f.layer?.id === HAZARD_FILL_ID);
@@ -148,6 +192,7 @@ export default function HazardMap({
         style={{ width: '100%', height: '100%' }}
         interactiveLayerIds={interactiveLayerIds}
         onClick={onClick}
+        onLoad={onLoad}
       >
         <NavigationControl position="top-left" />
         <ScaleControl position="bottom-left" />

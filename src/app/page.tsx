@@ -81,14 +81,16 @@ export default function DashboardPage() {
                   ))}
                   {/* Unsurveyed area needs its own key, or grey reads as "safe". */}
                   <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                    {/* Mirrors the map's hatch so the key is recognisable. */}
                     <Box
                       sx={{
                         width: 14,
                         height: 14,
                         borderRadius: 0.5,
-                        bgcolor: '#9E9E9E',
-                        opacity: 0.45,
-                        border: '1px dashed #616161',
+                        border: '1px solid #616161',
+                        backgroundColor: 'rgba(120,120,120,0.14)',
+                        backgroundImage:
+                          'repeating-linear-gradient(45deg, rgba(70,70,70,0.55) 0 1.5px, transparent 1.5px 4px)',
                       }}
                     />
                     <Typography variant="caption">{dict.hazard.notMapped}</Typography>
