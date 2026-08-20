@@ -46,20 +46,34 @@ export async function dispatchOnce(now: Date = new Date()): Promise<DispatchResu
   }
 
   // Oldest queued job first, so an alert cannot be starved by newer ones.
+  //
+  // Sorted in memory rather than with orderBy('createdAt'): combining a
+  // `where` on status with an orderBy on a different field would demand a
+  // composite index, and this project deliberately keeps its index set empty
+  // so there is nothing to define, deploy or keep in sync. The queue holds one
+  // job per fired alert and is drained continuously, so the candidate set is
+  // tiny and the sort is free.
   const jobSnap = await database
     .collection(COLLECTIONS.emailJobs)
     .where('status', 'in', ['QUEUED', 'SENDING'])
-    .orderBy('createdAt')
-    .limit(1)
+    .limit(25)
     .get();
 
   if (jobSnap.empty) {
     return { jobId: null, sent: 0, skipped: 0, failed: 0, hasMore: false, reason: 'queue empty' };
   }
 
-  const jobRef = jobSnap.docs[0].ref;
-  const job = jobSnap.docs[0].data();
+  const oldest = jobSnap.docs.reduce((a, b) => {
+    const at = (a.get('createdAt') as { toMillis?: () => number })?.toMillis?.() ?? 0;
+    const bt = (b.get('createdAt') as { toMillis?: () => number })?.toMillis?.() ?? 0;
+    return bt < at ? b : a;
+  });
+
+  const jobRef = oldest.ref;
+  const job = oldest.data();
   const jobId = jobRef.id;
+  // More than one job outstanding means the caller should come back.
+  const moreJobsQueued = jobSnap.size > 1;
 
   const alertSnap = await database.collection(COLLECTIONS.alerts).doc(job.alertId as string).get();
   if (!alertSnap.exists) {
@@ -212,7 +226,10 @@ export async function dispatchOnce(now: Date = new Date()): Promise<DispatchResu
 
   await counterRef.set({ date: todayKey, count: sentToday }, { merge: true });
 
-  return { jobId, sent, skipped, failed, hasMore };
+  // Keep the caller looping while this job is unfinished OR other jobs are
+  // still waiting behind it — otherwise a second queued alert would sit
+  // undelivered until the next scheduled run.
+  return { jobId, sent, skipped, failed, hasMore: hasMore || (done && moreJobsQueued) };
 }
 
 /** Queues an alert for fan-out. Called by the cron after an alert fires. */
