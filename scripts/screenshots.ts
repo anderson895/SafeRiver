@@ -62,6 +62,7 @@ const PAGES: PageSpec[] = [
   },
   { path: '/alerts', name: 'alerts' },
   { path: '/subscribe', name: 'subscribe' },
+  { path: '/about', name: 'about' },
 ];
 
 /** The map needs its tiles and GeoJSON settled before it is worth capturing. */
