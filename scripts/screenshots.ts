@@ -14,7 +14,7 @@
  * requirement and for the accessibility evaluation.
  */
 import { chromium, type Browser, type Page } from 'playwright';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
@@ -27,14 +27,37 @@ const VIEWPORTS = [
   { name: 'mobile', width: 390, height: 844 },
 ] as const;
 
-const PAGES = [
+/**
+ * Must list every route reachable from the navigation.
+ *
+ * This drifted once already: /subscribe was added to the nav but not here, so
+ * the notification flow — the feature the whole alert system exists for — was
+ * silently absent from the documentation. If you add a nav item, add it here.
+ */
+interface PageSpec {
+  path: string;
+  name: string;
+  /**
+   * Extra captures taken after clicking a tab. Without these, a tabbed page
+   * only ever documents its default tab — which on /rainfall would omit the
+   * 24-hour forecast chart, the one genuinely hourly visual in the system.
+   */
+  tabs?: Array<{ label: string; name: string }>;
+}
+
+const PAGES: PageSpec[] = [
   { path: '/', name: 'dashboard' },
-  { path: '/rainfall', name: 'rainfall' },
+  {
+    path: '/rainfall',
+    name: 'rainfall',
+    tabs: [{ label: 'Rainfall Data|Datos ng Ulan', name: 'rainfall-data' }],
+  },
   { path: '/water-level', name: 'water-level' },
   { path: '/dam-advisory', name: 'dam-advisory' },
   { path: '/flood-info', name: 'flood-info' },
   { path: '/alerts', name: 'alerts' },
-] as const;
+  { path: '/subscribe', name: 'subscribe' },
+];
 
 /** The map needs its tiles and GeoJSON settled before it is worth capturing. */
 async function settle(page: Page, isMapPage: boolean) {
@@ -74,9 +97,32 @@ async function capture(browser: Browser, lang: 'en' | 'tl') {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
         await settle(page, spec.path === '/');
 
-        const file = join(dir, `${String(i + 1).padStart(2, '0')}-${spec.name}.png`);
+        const order = String(i + 1).padStart(2, '0');
+        const file = join(dir, `${order}-${spec.name}.png`);
         await page.screenshot({ path: file, fullPage: true });
         console.log(`  ${vp.name}/${lang}  ${spec.name.padEnd(14)} -> ${file}`);
+
+        for (const tab of spec.tabs ?? []) {
+          // Labels differ by language, so accept a pipe-separated set.
+          const names = tab.label.split('|');
+          let clicked = false;
+          for (const n of names) {
+            const el = page.getByRole('tab', { name: n, exact: false });
+            if (await el.count()) {
+              await el.first().click();
+              clicked = true;
+              break;
+            }
+          }
+          if (!clicked) {
+            console.warn(`  ! ${vp.name}/${lang} could not find tab "${tab.label}"`);
+            continue;
+          }
+          await page.waitForTimeout(900);
+          const tabFile = join(dir, `${order}b-${tab.name}.png`);
+          await page.screenshot({ path: tabFile, fullPage: true });
+          console.log(`  ${vp.name}/${lang}  ${tab.name.padEnd(14)} -> ${tabFile}`);
+        }
       } catch (err) {
         console.error(`  FAILED ${vp.name}/${lang} ${spec.name}: ${(err as Error).message}`);
       }
@@ -90,8 +136,35 @@ async function capture(browser: Browser, lang: 'en' | 'tl') {
   }
 }
 
+/**
+ * Fails loudly when a navigation entry has no corresponding screenshot.
+ *
+ * Reads navItems.ts as text rather than importing it, because that module
+ * pulls in MUI icon components which have no place in a CLI script. A regex is
+ * acceptable here: this is a documentation check, and its failure mode is a
+ * visible warning rather than a broken build.
+ */
+function checkNavCoverage(): void {
+  try {
+    const src = readFileSync('src/components/layout/navItems.ts', 'utf8');
+    const hrefs = [...src.matchAll(/href:\s*'([^']+)'/g)].map((m) => m[1]);
+    const captured = new Set(PAGES.map((p) => p.path));
+    const missing = hrefs.filter((h) => !captured.has(h as (typeof PAGES)[number]['path']));
+
+    if (missing.length) {
+      console.warn(`WARNING: these nav routes are not being captured: ${missing.join(', ')}`);
+      console.warn('         Add them to PAGES in this file.\n');
+    } else {
+      console.log(`Nav coverage: all ${hrefs.length} navigation routes are captured.\n`);
+    }
+  } catch {
+    // Never let the check itself break screenshot generation.
+  }
+}
+
 async function main() {
   console.log(`Capturing ${BASE_URL}\n`);
+  checkNavCoverage();
 
   // Fail fast with a clear message instead of 24 confusing timeouts.
   try {

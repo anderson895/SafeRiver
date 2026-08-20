@@ -29,9 +29,16 @@ const PROVINCE = 'Pangasinan';
 const MUNICIPALITY = 'SanManuel'; // GADM spells municipality names without spaces
 const RETURN_PERIODS = ['5yr', '25yr', '100yr'];
 
-// San Manuel bbox (120.6112,16.0422 -> 120.7245,16.2046) padded ~2 km so the
-// hazard layer does not stop abruptly at the municipal line.
-const CLIP_BBOX = '120.59,16.02,120.75,16.23';
+/**
+ * Fast pre-filter only. Cuts the province-wide shapefile down before the real
+ * clip, which is what makes the polygon clip affordable on a 168 MB input.
+ *
+ * This must NOT be the final extent. A bbox produces dead-straight edges that
+ * read as hazard boundaries but are really just the edge of the box, and it
+ * spills 2-3 km into Binalonan, Laoac and Asingan — municipalities outside the
+ * study area. The authoritative clip is the municipal boundary below.
+ */
+const PREFILTER_BBOX = '120.59,16.02,120.75,16.23';
 
 const OUT_DIR = 'public/geo';
 
@@ -59,10 +66,16 @@ async function buildFloodLayers() {
     // -dissolve2 (merging adjacent same-class polygons) does more for file size
     // than simplification alone. keep-shapes stops small hazard islands from
     // being simplified out of existence.
+    //
+    // Two clips: a cheap bbox to shrink the province-wide input, then the
+    // municipal boundary for the actual extent. Simplification runs AFTER the
+    // boundary clip so the simplifier cannot pull vertices back across the
+    // municipal line.
     await runCommands(
       [
         `-i "${src}"`,
-        `-clip bbox=${CLIP_BBOX}`,
+        `-clip bbox=${PREFILTER_BBOX}`,
+        `-clip "${OUT_DIR}/sanmanuel-boundary.geojson"`,
         '-dissolve2 Var',
         '-simplify visvalingam 8% keep-shapes',
         '-filter-slivers min-area=200m2',
