@@ -54,7 +54,12 @@ const PAGES: PageSpec[] = [
   },
   { path: '/water-level', name: 'water-level' },
   { path: '/dam-advisory', name: 'dam-advisory' },
-  { path: '/flood-info', name: 'flood-info' },
+  {
+    path: '/flood-info',
+    name: 'flood-info',
+    // The safety-critical tab; worth documenting alongside the landing view.
+    tabs: [{ label: 'During a Flood|Habang Bumabaha', name: 'flood-info-during' }],
+  },
   { path: '/alerts', name: 'alerts' },
   { path: '/subscribe', name: 'subscribe' },
 ];
