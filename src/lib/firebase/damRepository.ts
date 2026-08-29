@@ -2,8 +2,9 @@ import 'server-only';
 import { db, COLLECTIONS, Timestamp } from './admin';
 import type { DamReading } from '@/lib/scrape/pagasaDams';
 import type { DamId } from '@/lib/scrape/damRegistry';
+import { classifyTrend, type Trend } from '@/lib/dams/trend';
 
-export type Trend = 'RISING' | 'FALLING' | 'STEADY';
+export type { Trend };
 
 /** Philippine Standard Time — all bucketing must be local, not UTC. */
 const PHT_MS = 8 * 60 * 60 * 1000;
@@ -29,12 +30,6 @@ export function readingDocId(damId: DamId, observedAt: Date): string {
   return `${phtMinuteKey(observedAt)}_${damId}`;
 }
 
-function classifyTrend(current: number | null, previous: number | null): Trend {
-  if (current == null || previous == null) return 'STEADY';
-  const delta = current - previous;
-  if (Math.abs(delta) < 0.01) return 'STEADY';
-  return delta > 0 ? 'RISING' : 'FALLING';
-}
 
 export interface PersistResult {
   damId: DamId;
@@ -61,11 +56,18 @@ export async function persistReading(reading: DamReading): Promise<PersistResult
   const isNewObservation =
     !priorObservedAt || priorObservedAt.getTime() !== reading.observedAt.getTime();
 
-  // Compare against the last *different* observation so the trend doesn't reset
-  // to STEADY every time we re-scrape the same daily bulletin.
-  const trend = isNewObservation
-    ? classifyTrend(reading.rwl, prior?.rwl ?? null)
-    : ((prior?.trend as Trend | undefined) ?? 'STEADY');
+  // Recompute whenever the bulletin carries a deviation. That figure is
+  // self-contained, so re-scraping the same bulletin yields the same answer.
+  //
+  // The isNewObservation guard existed because the old comparison diffed the
+  // reading against the stored copy of *itself* on a re-scrape, collapsing the
+  // trend to STEADY. That only affects the fallback path now — but it also
+  // meant a corrected trend could not take effect until the next daily
+  // bulletin, leaving a wrong arrow up for a day.
+  const trend =
+    reading.rwlDeviation24h != null || isNewObservation
+      ? classifyTrend(reading.rwlDeviation24h, reading.rwl, prior?.rwl ?? null)
+      : ((prior?.trend as Trend | undefined) ?? 'STEADY');
 
   const base = {
     damId: reading.damId,
