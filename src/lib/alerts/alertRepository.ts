@@ -56,17 +56,66 @@ export async function processSignals(
   const result: ProcessResult = { fired: [], suppressed: [] };
   const batch = database.batch();
 
-  keys.forEach((key, i) => {
-    const prior = readState(stateSnaps[i]?.data(), key);
+  // Decide first, with no I/O, so the set of firing keys is known before the
+  // reads that supersession needs.
+  const decisions = keys.map((key, i) => {
     const signal = byKey.get(key) ?? null;
-    const decision = decide(signal, prior, now, key);
+    return {
+      key,
+      signal,
+      decision: decide(signal, readState(stateSnaps[i]?.data(), key), now, key),
+    };
+  });
 
+  /*
+   * Alerts that a new fire replaces.
+   *
+   * Firing only ever appended a document and left the previous one active, so
+   * a signal re-firing after its cooldown accumulated duplicates that the
+   * dashboard then listed side by side — four simultaneous "Watch: Binga Dam
+   * reservoir level" entries for one condition. Worse, an ALL_CLEAR wrote its
+   * INFO notice without retiring the alert it was clearing, so "All Clear"
+   * sat directly above the warning it had supposedly resolved.
+   *
+   * Two equality filters need no composite index — Firestore merges the
+   * single-field ones — which keeps this project's index set empty. Verified
+   * against the live project rather than assumed.
+   */
+  const superseded = new Map<string, string[]>();
+  await Promise.all(
+    decisions
+      .filter((d) => d.decision.fire)
+      .map(async ({ key }) => {
+        const snap = await database
+          .collection(COLLECTIONS.alerts)
+          .where('signalKey', '==', key)
+          .where('isActive', '==', true)
+          .get();
+        superseded.set(
+          key,
+          snap.docs.map((d) => d.id),
+        );
+      }),
+  );
+
+  decisions.forEach(({ key, signal, decision }) => {
     const next = decision.nextState;
     let alertId: string | null = null;
 
     if (decision.fire) {
       const alertRef = database.collection(COLLECTIONS.alerts).doc();
       alertId = alertRef.id;
+
+      // Retire what this replaces, in the same batch, so there is never a
+      // moment where two live alerts describe one condition. An ALL_CLEAR
+      // retires its predecessors too — that is precisely its job.
+      for (const oldId of superseded.get(key) ?? []) {
+        batch.update(database.collection(COLLECTIONS.alerts).doc(oldId), {
+          isActive: false,
+          supersededBy: alertId,
+          supersededAt: Timestamp.fromDate(now),
+        });
+      }
 
       // An all-clear has no live signal, so synthesise one for composition.
       const forCompose: Signal =
@@ -136,6 +185,26 @@ export async function processSignals(
 }
 
 /** Recent alerts, newest first — powers the dashboard panel and alerts page. */
+/**
+ * How many alerts are active, across the whole collection.
+ *
+ * Not derivable from a page of recent alerts: the dashboard requests ten, so
+ * counting within that page reported "9 active alerts" while nineteen were
+ * live. A badge that silently saturates at the page size is worse than no
+ * badge, because it looks like a count.
+ *
+ * A count aggregation, so the cost does not scale with the number of alerts.
+ * Single equality filter, so no composite index.
+ */
+export async function countActiveAlerts(): Promise<number> {
+  const snap = await db()
+    .collection(COLLECTIONS.alerts)
+    .where('isActive', '==', true)
+    .count()
+    .get();
+  return snap.data().count;
+}
+
 export async function getRecentAlerts(limit = 20) {
   const snap = await db()
     .collection(COLLECTIONS.alerts)
