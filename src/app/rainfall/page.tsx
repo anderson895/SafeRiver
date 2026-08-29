@@ -45,6 +45,14 @@ interface RainfallData {
   radar: RadarData | null;
 }
 
+/**
+ * Age past which the stored rainfall reading stops being reported at all.
+ *
+ * The feed refreshes hourly, so three hours old means the poller has stopped —
+ * not that the weather is quiet.
+ */
+const STALE_AFTER_HOURS = 3;
+
 const WARNING_COLOR: Record<PagasaWarning, string> = {
   NONE: '#9E9E9E',
   YELLOW: '#FBC02D',
@@ -126,8 +134,23 @@ export default function RainfallPage() {
     );
   }
 
-  const mmHr = data.current?.precipitationMmHr ?? null;
   const isTl = lang === 'tl';
+
+  const ageHours = data.ageMinutes != null ? data.ageMinutes / 60 : null;
+  const isStale = ageHours != null && ageHours >= STALE_AFTER_HOURS;
+
+  // Past the threshold the stored reading is not merely old, it is unusable —
+  // and every figure below derives from it, so none of them may be shown.
+  //
+  // This is the null-vs-zero rule applied to time. A 0 mm/hr reading taken
+  // eight days ago is not "no rain", it is no information; and the radar beside
+  // it keeps refreshing, so a stale zero can end up sitting next to a live cell
+  // over the next barangay. That pairing is the precise failure this system
+  // exists to prevent.
+  const mmHr = isStale ? null : (data.current?.precipitationMmHr ?? null);
+  const peak3h = isStale ? null : data.maxNext3hMm;
+  const total24h = isStale ? null : data.next24hTotalMm;
+  const discharge = isStale ? null : data.riverDischargeCms;
 
   return (
     <>
@@ -135,13 +158,21 @@ export default function RainfallPage() {
         title={dict.rainfall.title}
         subtitle={dict.app.tagline}
         action={
+          // "No warning" is a claim about the weather. With no current reading
+          // there is nothing to claim, so say that instead of implying calm.
           <Chip
             size="small"
-            label={dict.warning[data.pagasaWarning]}
+            label={
+              isStale
+                ? isTl
+                  ? 'Walang kasalukuyang datos'
+                  : 'No current reading'
+                : dict.warning[data.pagasaWarning]
+            }
             sx={{
               fontWeight: 800,
-              bgcolor: `${WARNING_COLOR[data.pagasaWarning]}1A`,
-              color: WARNING_COLOR[data.pagasaWarning],
+              bgcolor: isStale ? '#9E9E9E1A' : `${WARNING_COLOR[data.pagasaWarning]}1A`,
+              color: isStale ? 'text.secondary' : WARNING_COLOR[data.pagasaWarning],
             }}
           />
         }
@@ -152,10 +183,7 @@ export default function RainfallPage() {
           refreshes hourly, so the same age means the poll has stopped. Showing
           "No rain" from six hours ago during a storm is the failure this
           system exists to prevent. */}
-      <StaleDataNotice
-        ageHours={data.ageMinutes != null ? data.ageMinutes / 60 : null}
-        thresholdHours={3}
-      />
+      <StaleDataNotice ageHours={ageHours} thresholdHours={STALE_AFTER_HOURS} />
 
       <Grid container spacing={3}>
         {/* Both columns stretch to the taller of the two, and the map grows to
@@ -180,6 +208,22 @@ export default function RainfallPage() {
                       ? 'Radar mula sa RainViewer. Kung walang kulay, maaaring walang available na radar — hindi ibig sabihing walang ulan. Ang forecast sa gilid ang batayan ng mga babala.'
                       : 'Radar imagery from RainViewer. An empty radar does not confirm "no rain" — it may simply mean no returns are available. The forecast figures alongside are what drive the alerts.'}
                   </Typography>
+
+                  {/* The radar refreshes on its own, straight from RainViewer,
+                      while the figures beside it come from the stored poll. So
+                      when the poller stops these two diverge silently, and the
+                      map is then the ONLY current thing on the page. Say which
+                      one to trust rather than leaving them to contradict each
+                      other in silence. */}
+                  {isStale && (
+                    <Alert severity="info" variant="outlined" sx={{ mt: 1.5, py: 0.5 }}>
+                      <Typography variant="caption">
+                        {isTl
+                          ? 'Ang radar sa itaas ay kasalukuyan. Ang mga bilang sa gilid ay hindi — huminto ang pagkuha ng datos. Kung may kulay sa radar malapit sa San Manuel, may ulan doon, anuman ang nakasulat sa gilid.'
+                          : 'The radar above is live. The figures beside it are not — data collection has stopped. If the radar shows colour near San Manuel, it is raining there, whatever the panel says.'}
+                      </Typography>
+                    </Alert>
+                  )}
                 </Box>
               ) : (
                 <Box sx={{ flexGrow: 1 }}>
@@ -200,9 +244,23 @@ export default function RainfallPage() {
                 <Typography variant="body2" color="text.secondary" gutterBottom>
                   {dict.rainfall.current}
                 </Typography>
-                <StatBig value={mmHr} unit={dict.common.mmPerHour} />
-                <Typography variant="subtitle2" sx={{ mt: 0.5, fontWeight: 700 }}>
-                  {dict.intensity[data.intensityClass]}
+                <StatBig
+                  value={mmHr}
+                  unit={dict.common.mmPerHour}
+                  emptyText={isTl ? 'Walang datos' : 'No reading'}
+                />
+                {/* The classification is only meaningful while the reading is.
+                    Printing "No rain" from a stopped feed states a fact about
+                    the sky that nothing here has observed. */}
+                <Typography
+                  variant="subtitle2"
+                  sx={{ mt: 0.5, fontWeight: 700, color: isStale ? 'text.secondary' : undefined }}
+                >
+                  {isStale
+                    ? isTl
+                      ? 'Hindi tumatakbo ang pagkuha ng datos'
+                      : 'Data collection has stopped'
+                    : dict.intensity[data.intensityClass]}
                 </Typography>
                 {/* "Current Rainfall" implied a measurement. Nothing here is
                     measured — DOST-ASTI operates rain gauges but exposes no
@@ -218,7 +276,7 @@ export default function RainfallPage() {
                       {isTl ? 'Pinakamalakas sa 3 oras' : 'Peak next 3 hours'}
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {data.maxNext3hMm != null ? `${data.maxNext3hMm} mm/hr` : '—'}
+                      {peak3h != null ? `${peak3h} mm/hr` : '—'}
                     </Typography>
                   </Stack>
                   <Divider />
@@ -227,7 +285,7 @@ export default function RainfallPage() {
                       {dict.rainfall.total24h}
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {data.next24hTotalMm != null ? `${data.next24hTotalMm} mm` : '—'}
+                      {total24h != null ? `${total24h} mm` : '—'}
                     </Typography>
                   </Stack>
                 </Stack>
@@ -250,7 +308,12 @@ export default function RainfallPage() {
                 <Typography variant="body2" color="text.secondary" gutterBottom>
                   {dict.water.riverCondition}
                 </Typography>
-                <StatBig value={data.riverDischargeCms} unit="m³/s" color="info.main" />
+                <StatBig
+                  value={discharge}
+                  unit="m³/s"
+                  color="info.main"
+                  emptyText={isTl ? 'Walang datos' : 'No reading'}
+                />
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                   {isTl
                     ? 'Tinatayang daloy ng Ilog Agno mula sa GloFAS (Open-Meteo Flood API).'

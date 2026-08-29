@@ -67,13 +67,30 @@ export default function RainfallMap({
     [radar, active],
   );
 
-  const label = active
+  const activeAt = active ? new Date(active.time * 1000) : null;
+
+  const manilaDay = (d: Date) =>
+    new Intl.DateTimeFormat('en-PH', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+
+  // Carry the date whenever the frame is not from today. A bare "5:40 PM" makes
+  // a frame from last week read as current — the one thing a radar timestamp
+  // exists to rule out. Safe to compare against now() here: this component is
+  // loaded with ssr:false, so there is no server render to mismatch.
+  const label = activeAt
     ? new Intl.DateTimeFormat('en-PH', {
         timeZone: 'Asia/Manila',
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
-      }).format(new Date(active.time * 1000))
+        ...(manilaDay(activeAt) === manilaDay(new Date())
+          ? {}
+          : { month: 'short' as const, day: 'numeric' as const }),
+      }).format(activeAt)
     : null;
 
   return (
