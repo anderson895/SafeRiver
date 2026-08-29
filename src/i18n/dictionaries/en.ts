@@ -65,6 +65,8 @@ export const en = {
     floodWatch: 'Flood Watch',
     releasing: 'Releasing Water',
     notReleasing: 'Not releasing',
+    /** Distinct from notReleasing: the bulletin published no figure at all. */
+    releaseUnknown: 'Release not reported',
     ofNhwl: 'of spilling level',
   },
   rainfall: {

@@ -64,9 +64,18 @@ export function toDamDto(raw: Record<string, unknown>, now = new Date()): DamDto
 
     percentOfNhwl: rwl != null && nhwl ? Number(((rwl / nhwl) * 100).toFixed(1)) : null,
 
-    // Note the null-safety: `gatesOpen` being null means "not published",
-    // which must not be read as "zero gates open, therefore not releasing".
-    isReleasing: (gatesOpen ?? 0) > 0 || (outflowCms ?? 0) > 0,
+    // Three states, because two cannot express what the bulletin actually says.
+    //
+    // The comment that stood here stated the rule correctly — null means "not
+    // published", never "zero gates open" — and the code then did exactly what
+    // it warned against: `(null ?? 0) > 0` is false, so an unpublished figure
+    // was reported as "not releasing". For San Roque, whose gate and outflow
+    // columns are blank in most bulletins, that turned silence into a green
+    // "Normal Operation" badge on the one dam sitting inside San Manuel.
+    isReleasing:
+      gatesOpen == null && outflowCms == null
+        ? null
+        : (gatesOpen ?? 0) > 0 || (outflowCms ?? 0) > 0,
 
     ageHours: ageHours == null ? null : Number(ageHours.toFixed(1)),
   };

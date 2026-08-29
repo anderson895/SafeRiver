@@ -40,8 +40,17 @@ export interface DamDto {
 
   /** How full the reservoir is relative to its spilling level, as a percentage. */
   percentOfNhwl: number | null;
-  /** True when gates are open or a positive outflow is reported. */
-  isReleasing: boolean;
+  /**
+   * True when gates are open or a positive outflow is reported, false when a
+   * figure is published and shows no release, and **null when nothing is
+   * published at all**.
+   *
+   * The third state is not optional. PAGASA leaves San Roque's gate and outflow
+   * columns blank in most bulletins, and San Roque is the dam inside San Manuel
+   * — the one whose release floods the town. A plain boolean forces that
+   * silence to be rendered as "Normal Operation".
+   */
+  isReleasing: boolean | null;
   /** Hours since the observation; drives the stale-data notice. */
   ageHours: number | null;
 }

@@ -7,16 +7,15 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Skeleton from '@mui/material/Skeleton';
 import Alert from '@mui/material/Alert';
 import LinearProgress from '@mui/material/LinearProgress';
 import Button from '@mui/material/Button';
-import FiberManualRecord from '@mui/icons-material/FiberManualRecord';
 import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import PageHeader from '@/components/common/PageHeader';
+import DamReleaseChip from '@/components/dam/DamReleaseChip';
 import StaleDataNotice from '@/components/common/StaleDataNotice';
 import { StatBig, TrendIndicator } from '@/components/common/StatBig';
 import ReleaseHistoryChart from '@/components/dam/ReleaseHistoryChart';
@@ -78,14 +77,7 @@ function DamCard({
               {dam.location}
             </Typography>
           </Box>
-          {/* Icon + text, never colour alone (WCAG 1.4.1). */}
-          <Chip
-            size="small"
-            icon={dam.isReleasing ? <WarningAmberOutlined /> : <FiberManualRecord />}
-            color={dam.isReleasing ? 'error' : 'success'}
-            variant={dam.isReleasing ? 'filled' : 'outlined'}
-            label={dam.isReleasing ? dict.dam.releasing : dict.dam.normalOperation}
-          />
+          <DamReleaseChip isReleasing={dam.isReleasing} />
         </Stack>
 
         <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', mb: 1 }}>
@@ -107,7 +99,11 @@ function DamCard({
         <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <TrendIndicator trend={dam.trend} />
           <Typography variant="caption" color="text.secondary">
-            {dam.outflowCms != null ? `${dam.outflowCms} CMS` : dict.dam.notReleasing}
+            {dam.outflowCms != null
+              ? `${dam.outflowCms} CMS`
+              : dam.isReleasing === false
+                ? dict.dam.notReleasing
+                : dict.dam.releaseUnknown}
           </Typography>
         </Stack>
       </CardContent>
@@ -214,11 +210,16 @@ export default function DamAdvisoryPage() {
                 {dict.dam.currentRelease}
               </Typography>
 
+              {/* "Not releasing" is only true when a figure was published and
+                  showed none. With a blank column the honest answer is that
+                  nothing was reported. */}
               <StatBig
                 value={selected.outflowCms}
                 unit={dict.common.cms}
                 color={selected.isReleasing ? 'error.main' : 'text.primary'}
-                emptyText={dict.dam.notReleasing}
+                emptyText={
+                  selected.isReleasing === false ? dict.dam.notReleasing : dict.dam.releaseUnknown
+                }
               />
 
               <Stack spacing={1.5} sx={{ mt: 2.5 }}>

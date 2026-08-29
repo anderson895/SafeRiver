@@ -30,7 +30,9 @@ interface Status {
   email: { alertsEnabled: boolean; activeSubscribers: number; pendingJobs: number };
   agno: Array<{
     damId: string; damName: string; rwl: number | null; nhwl: number | null;
-    outflowCms: number | null; gatesOpen: number | null; isReleasing: boolean;
+    // null = the bulletin published no gate or outflow figure, which is not
+    // the same as a confirmed "not releasing".
+    outflowCms: number | null; gatesOpen: number | null; isReleasing: boolean | null;
   }>;
 }
 
@@ -408,9 +410,15 @@ export default function AdminPage() {
                         <Typography variant="body2" sx={{ fontWeight: 700 }}>{d.damName}</Typography>
                         <Chip
                           size="small"
-                          color={d.isReleasing ? 'error' : 'success'}
+                          color={d.isReleasing ? 'error' : d.isReleasing === false ? 'success' : 'default'}
                           variant={d.isReleasing ? 'filled' : 'outlined'}
-                          label={d.isReleasing ? 'Releasing' : 'Normal'}
+                          label={
+                            d.isReleasing
+                              ? 'Releasing'
+                              : d.isReleasing === false
+                                ? 'Normal'
+                                : 'Not reported'
+                          }
                         />
                       </Stack>
                       <Typography variant="caption" color="text.secondary">

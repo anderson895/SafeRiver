@@ -69,6 +69,7 @@ export const tl: Dictionary = {
     floodWatch: 'Binabantayan sa Baha',
     releasing: 'Nagpapakawala ng Tubig',
     notReleasing: 'Walang pinapakawalan',
+    releaseUnknown: 'Walang ulat ng pagpapakawala',
     ofNhwl: 'ng lebel ng pag-apaw',
   },
   rainfall: {

@@ -10,11 +10,19 @@ import { useI18n } from '@/i18n/I18nProvider';
 /**
  * Outflow over time.
  *
- * Days where PAGASA published no release are plotted as 0 rather than dropped,
- * because for *this* series a blank genuinely does mean "no release reported"
- * and a gap would misleadingly imply missing data. That is the opposite of how
- * the current-reading card treats null — there, blank must never be shown as
- * zero, since it would read as "confirmed not releasing".
+ * Nulls are plotted as GAPS, not as zero.
+ *
+ * This file previously argued the opposite — that a blank means "no release
+ * reported" and so belongs on the axis at 0. That is wrong, and the accessible
+ * table below gave it away: the table rendered null as "—" while the line was
+ * drawn through 0.00, so the same data told two contradictory stories and the
+ * chart was the one people read. For San Roque, whose outflow column PAGASA
+ * leaves blank in most bulletins, it drew a flat red line along zero for thirty
+ * days — an assertion of "released nothing all month" built entirely out of
+ * missing data.
+ *
+ * The scraper already distinguishes the two: a published "0" parses to 0, an
+ * empty cell to null. That distinction has to survive to the chart.
  */
 export default function ReleaseHistoryChart({
   points,
@@ -42,7 +50,26 @@ export default function ReleaseHistoryChart({
     );
   }
 
-  const values = points.map((p) => p.outflowCms ?? 0);
+  const values = points.map((p) => p.outflowCms);
+
+  // Every value missing is not a flat line at zero, it is no series at all.
+  // Say which dam this happens to and why, rather than drawing nothing.
+  if (!values.some((v) => v != null)) {
+    return (
+      <Stack
+        spacing={1}
+        sx={{ height, alignItems: 'center', justifyContent: 'center', textAlign: 'center', px: 3 }}
+      >
+        <Typography variant="body2" sx={{ fontWeight: 600 }} color="text.secondary">
+          {dict.dam.releaseUnknown}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 420 }}>
+          The PAGASA bulletin leaves this dam&apos;s outflow column blank, so there is no release
+          figure to chart. Blank is not zero — an unreported release is not a release of nothing.
+        </Typography>
+      </Stack>
+    );
+  }
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -56,6 +83,9 @@ export default function ReleaseHistoryChart({
             area: true,
             showMark: points.length <= 20,
             curve: 'monotoneX',
+            // Explicit, though it is the default: a day with no published
+            // figure must break the line rather than be bridged across.
+            connectNulls: false,
             valueFormatter: (v) => (v == null ? '—' : `${v} CMS`),
           },
         ]}

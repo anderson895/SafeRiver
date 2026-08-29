@@ -12,8 +12,8 @@ import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Skeleton from '@mui/material/Skeleton';
 import Alert from '@mui/material/Alert';
-import Chip from '@mui/material/Chip';
 import PageHeader from '@/components/common/PageHeader';
+import DamReleaseChip from '@/components/dam/DamReleaseChip';
 import StaleDataNotice from '@/components/common/StaleDataNotice';
 import { StatBig, TrendIndicator, ThresholdRow } from '@/components/common/StatBig';
 import WaterLevelTrendChart from '@/components/water/WaterLevelTrendChart';
@@ -184,11 +184,14 @@ export default function WaterLevelPage() {
                 {dict.dam.currentRelease}
               </Typography>
 
+              {/* emptyText was `notReleasing`, so a blank outflow column
+                  printed the words "Not releasing" — a claim about the dam
+                  built from the absence of a figure. */}
               <StatBig
                 value={dam.outflowCms}
                 unit={dict.common.cms}
                 color={dam.isReleasing ? 'error.main' : 'text.primary'}
-                emptyText={dict.dam.notReleasing}
+                emptyText={dam.isReleasing === false ? dict.dam.notReleasing : dict.dam.releaseUnknown}
               />
 
               <Stack spacing={1.5} sx={{ mt: 2 }}>
@@ -207,12 +210,7 @@ export default function WaterLevelPage() {
                   <Typography variant="body2" color="text.secondary">
                     Status
                   </Typography>
-                  <Chip
-                    size="small"
-                    color={dam.isReleasing ? 'error' : 'success'}
-                    variant={dam.isReleasing ? 'filled' : 'outlined'}
-                    label={dam.isReleasing ? dict.dam.releasing : dict.dam.normalOperation}
-                  />
+                  <DamReleaseChip isReleasing={dam.isReleasing} />
                 </Stack>
               </Stack>
 
